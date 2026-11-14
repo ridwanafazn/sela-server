@@ -29,6 +29,7 @@ type Config struct {
 	Health    Health
 	JWT       JWT
 	RateLimit RateLimit
+	AI        AI
 	Log       Log
 }
 
@@ -84,6 +85,27 @@ type RateLimit struct {
 	LoginPerHourAccount int
 	RegisterPerHourIP   int
 	RefreshPerMinuteIP  int
+}
+
+// AI holds provider and model settings. Fake providers are the local default
+// so the application can run without external credentials.
+type AI struct {
+	Provider             string
+	BaseURL              string
+	APIKey               string
+	Model                string
+	Timeout              time.Duration
+	MaxRetries           int
+	EmbeddingProvider    string
+	EmbeddingBaseURL     string
+	EmbeddingAPIKey      string
+	EmbeddingModel       string
+	EmbeddingDimension   int
+	EmbeddingTimeout     time.Duration
+	VertexProjectID      string
+	VertexRegion         string
+	VertexEmbeddingModel string
+	VertexBaseURL        string
 }
 
 // Log holds structured logging settings.
@@ -231,6 +253,72 @@ func load(lookup func(string) (string, bool)) (*Config, error) {
 		}
 	}
 
+	aiCfg := AI{
+		Provider:             strings.ToLower(stringValue(lookup, "AI_PROVIDER", "fake")),
+		BaseURL:              strings.TrimSpace(stringValue(lookup, "AI_BASE_URL", "")),
+		APIKey:               strings.TrimSpace(stringValue(lookup, "AI_API_KEY", "")),
+		Model:                stringValue(lookup, "AI_MODEL", ""),
+		Timeout:              durationValue(lookup, "AI_TIMEOUT", 60*time.Second, &problems),
+		MaxRetries:           intValue(lookup, "AI_MAX_RETRIES", 3, &problems),
+		EmbeddingProvider:    strings.ToLower(stringValue(lookup, "EMBEDDING_PROVIDER", "fake")),
+		EmbeddingBaseURL:     strings.TrimSpace(stringValue(lookup, "EMBEDDING_BASE_URL", "")),
+		EmbeddingAPIKey:      strings.TrimSpace(stringValue(lookup, "EMBEDDING_API_KEY", "")),
+		EmbeddingModel:       stringValue(lookup, "EMBEDDING_MODEL", ""),
+		EmbeddingDimension:   intValue(lookup, "EMBEDDING_DIMENSION", 768, &problems),
+		EmbeddingTimeout:     durationValue(lookup, "EMBEDDING_TIMEOUT", 30*time.Second, &problems),
+		VertexProjectID:      strings.TrimSpace(stringValue(lookup, "VERTEX_PROJECT_ID", "")),
+		VertexRegion:         strings.TrimSpace(stringValue(lookup, "VERTEX_REGION", "asia-southeast1")),
+		VertexEmbeddingModel: stringValue(lookup, "VERTEX_EMBEDDING_MODEL", "text-embedding-004"),
+		VertexBaseURL:        strings.TrimSpace(stringValue(lookup, "VERTEX_BASE_URL", "")),
+	}
+
+	if !isOneOf(aiCfg.Provider, "fake", "openai") {
+		problems = append(problems, "AI_PROVIDER must be fake or openai")
+	}
+	if aiCfg.Provider == "openai" {
+		if aiCfg.BaseURL == "" {
+			problems = append(problems, "AI_BASE_URL is required when AI_PROVIDER=openai")
+		}
+		if aiCfg.APIKey == "" {
+			problems = append(problems, "AI_API_KEY is required when AI_PROVIDER=openai")
+		}
+		if aiCfg.Model == "" {
+			problems = append(problems, "AI_MODEL is required when AI_PROVIDER=openai")
+		}
+	}
+	if aiCfg.MaxRetries < 0 || aiCfg.MaxRetries > 5 {
+		problems = append(problems, "AI_MAX_RETRIES must be between 0 and 5")
+	}
+
+	if aiCfg.EmbeddingDimension != 768 {
+		problems = append(problems, "EMBEDDING_DIMENSION must be 768 for the MVP schema")
+	}
+	if !isOneOf(aiCfg.EmbeddingProvider, "fake", "openai", "vertex") {
+		problems = append(problems, "EMBEDDING_PROVIDER must be fake, openai, or vertex")
+	}
+	switch aiCfg.EmbeddingProvider {
+	case "openai":
+		if aiCfg.EmbeddingBaseURL == "" {
+			problems = append(problems, "EMBEDDING_BASE_URL is required when EMBEDDING_PROVIDER=openai")
+		}
+		if aiCfg.EmbeddingAPIKey == "" {
+			problems = append(problems, "EMBEDDING_API_KEY is required when EMBEDDING_PROVIDER=openai")
+		}
+		if aiCfg.EmbeddingModel == "" {
+			problems = append(problems, "EMBEDDING_MODEL is required when EMBEDDING_PROVIDER=openai")
+		}
+	case "vertex":
+		if aiCfg.VertexProjectID == "" {
+			problems = append(problems, "VERTEX_PROJECT_ID is required when EMBEDDING_PROVIDER=vertex")
+		}
+		if aiCfg.VertexRegion == "" {
+			problems = append(problems, "VERTEX_REGION is required when EMBEDDING_PROVIDER=vertex")
+		}
+		if aiCfg.VertexEmbeddingModel == "" {
+			problems = append(problems, "VERTEX_EMBEDDING_MODEL is required when EMBEDDING_PROVIDER=vertex")
+		}
+	}
+
 	if len(problems) > 0 {
 		return nil, fmt.Errorf("invalid configuration: %s", strings.Join(problems, "; "))
 	}
@@ -241,18 +329,12 @@ func load(lookup func(string) (string, bool)) (*Config, error) {
 			Name: appName,
 			Port: appPort,
 		},
-		HTTP:     httpCfg,
-		Database: dbCfg,
-		Health:   healthCfg,
-		JWT:      jwtCfg,
-		RateLimit: RateLimit{
-			Secret:              rateLimitSecret,
-			TrustedProxyHops:    rateLimitCfg.TrustedProxyHops,
-			LoginPerMinuteIP:    rateLimitCfg.LoginPerMinuteIP,
-			LoginPerHourAccount: rateLimitCfg.LoginPerHourAccount,
-			RegisterPerHourIP:   rateLimitCfg.RegisterPerHourIP,
-			RefreshPerMinuteIP:  rateLimitCfg.RefreshPerMinuteIP,
-		},
+		HTTP:      httpCfg,
+		Database:  dbCfg,
+		Health:    healthCfg,
+		JWT:       jwtCfg,
+		RateLimit: rateLimitCfg,
+		AI:        aiCfg,
 		Log: Log{
 			Level:  logLevel,
 			Format: logFormat,

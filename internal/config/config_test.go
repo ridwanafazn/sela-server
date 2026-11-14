@@ -56,6 +56,15 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.RateLimit.RegisterPerHourIP != 3 || cfg.RateLimit.RefreshPerMinuteIP != 30 {
 		t.Errorf("register/refresh limits = (%d, %d), want (3, 30)", cfg.RateLimit.RegisterPerHourIP, cfg.RateLimit.RefreshPerMinuteIP)
 	}
+	if cfg.AI.Provider != "fake" || cfg.AI.Model != "" {
+		t.Errorf("AI defaults = (%q, %q), want (fake, empty model)", cfg.AI.Provider, cfg.AI.Model)
+	}
+	if cfg.AI.EmbeddingProvider != "fake" || cfg.AI.EmbeddingDimension != 768 {
+		t.Errorf("embedding defaults = (%q, %d), want (fake, 768)", cfg.AI.EmbeddingProvider, cfg.AI.EmbeddingDimension)
+	}
+	if cfg.AI.Timeout != 60*time.Second || cfg.AI.EmbeddingTimeout != 30*time.Second {
+		t.Errorf("AI timeouts = (%s, %s), want (60s, 30s)", cfg.AI.Timeout, cfg.AI.EmbeddingTimeout)
+	}
 	if cfg.Log.Level != "info" || cfg.Log.Format != "json" {
 		t.Errorf("log defaults = (%q, %q), want (info, json)", cfg.Log.Level, cfg.Log.Format)
 	}
@@ -183,5 +192,60 @@ func TestLoadRejectsInvalidPrecedence(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "DATABASE_MAX_IDLE_CONNS") {
 		t.Errorf("error = %q, want it to mention DATABASE_MAX_IDLE_CONNS", err)
+	}
+}
+
+func TestLoadRequiresOpenAIProviderSettings(t *testing.T) {
+	values := validValues()
+	values["AI_PROVIDER"] = "openai"
+
+	_, err := load(lookupFrom(values))
+	if err == nil {
+		t.Fatal("load returned nil error, want missing OpenAI settings failure")
+	}
+	for _, want := range []string{"AI_BASE_URL", "AI_API_KEY", "AI_MODEL"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error = %q, want it to mention %s", err, want)
+		}
+	}
+}
+
+func TestLoadRequiresVertexEmbeddingSettings(t *testing.T) {
+	values := validValues()
+	values["EMBEDDING_PROVIDER"] = "vertex"
+	delete(values, "VERTEX_PROJECT_ID")
+
+	_, err := load(lookupFrom(values))
+	if err == nil {
+		t.Fatal("load returned nil error, want missing Vertex settings failure")
+	}
+	if !strings.Contains(err.Error(), "VERTEX_PROJECT_ID") {
+		t.Errorf("error = %q, want it to mention VERTEX_PROJECT_ID", err)
+	}
+}
+
+func TestLoadRejectsWrongEmbeddingDimension(t *testing.T) {
+	values := validValues()
+	values["EMBEDDING_DIMENSION"] = "1536"
+
+	_, err := load(lookupFrom(values))
+	if err == nil {
+		t.Fatal("load returned nil error, want dimension failure")
+	}
+	if !strings.Contains(err.Error(), "EMBEDDING_DIMENSION") {
+		t.Errorf("error = %q, want it to mention EMBEDDING_DIMENSION", err)
+	}
+}
+
+func TestLoadRejectsInvalidAIProvider(t *testing.T) {
+	values := validValues()
+	values["AI_PROVIDER"] = "unknown"
+
+	_, err := load(lookupFrom(values))
+	if err == nil {
+		t.Fatal("load returned nil error, want provider failure")
+	}
+	if !strings.Contains(err.Error(), "AI_PROVIDER") {
+		t.Errorf("error = %q, want it to mention AI_PROVIDER", err)
 	}
 }

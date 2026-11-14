@@ -5,6 +5,7 @@ package integration_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -293,6 +294,144 @@ func TestDraftAndActiveStatusesAreAllowed(t *testing.T) {
 			uuid.NewString(), userID, "content", status,
 		)
 	}
+}
+
+func TestPhase2SchemaConstraints(t *testing.T) {
+	db, _ := testdb.New(t)
+	ctx := context.Background()
+	userID := insertUser(t, db, "phase2@example.com")
+
+	conversationID := uuid.NewString()
+	exec(t, db,
+		`INSERT INTO conversations (id, user_id, title) VALUES ($1, $2, $3)`,
+		conversationID, userID, "Conversation",
+	)
+
+	messageID := uuid.NewString()
+	exec(t, db,
+		`INSERT INTO messages (id, conversation_id, user_id, role, content, idempotency_key)
+		 VALUES ($1, $2, $3, 'user', 'hello', $4)`,
+		messageID, conversationID, userID, uuid.NewString(),
+	)
+
+	_, err := db.SQL.ExecContext(ctx,
+		`INSERT INTO messages (id, conversation_id, user_id, role, content) VALUES ($1, $2, $3, 'system', 'bad')`,
+		uuid.NewString(), conversationID, userID,
+	)
+	requirePgError(t, err, "23514", "messages_role_check")
+
+	// The same idempotency key is unique per conversation.
+	key := uuid.NewString()
+	exec(t, db,
+		`INSERT INTO messages (id, conversation_id, user_id, role, content, idempotency_key)
+		 VALUES ($1, $2, $3, 'user', 'first', $4)`,
+		uuid.NewString(), conversationID, userID, key,
+	)
+	_, err = db.SQL.ExecContext(ctx,
+		`INSERT INTO messages (id, conversation_id, user_id, role, content, idempotency_key)
+		 VALUES ($1, $2, $3, 'user', 'second', $4)`,
+		uuid.NewString(), conversationID, userID, key,
+	)
+	requirePgError(t, err, "23505", "messages_conversation_idempotency_key_key")
+
+	journalID := uuid.NewString()
+	exec(t, db,
+		`INSERT INTO journals (id, user_id, content, entry_date) VALUES ($1, $2, $3, CURRENT_DATE)`,
+		journalID, userID, "journal content",
+	)
+
+	embeddingID := uuid.NewString()
+	exec(t, db,
+		`INSERT INTO journal_embeddings
+		 (id, journal_id, user_id, chunk_index, start_offset, end_offset, content_hash, embedding, embedding_model)
+		 VALUES ($1, $2, $3, 0, 0, 10, 'hash', $4::vector, 'text-embedding-004')`,
+		embeddingID, journalID, userID, vectorLiteral(768),
+	)
+
+	var dimensions int
+	if err := db.SQL.QueryRowContext(ctx,
+		`SELECT vector_dims(embedding) FROM journal_embeddings WHERE id = $1`, embeddingID,
+	).Scan(&dimensions); err != nil {
+		t.Fatalf("read vector dimensions: %v", err)
+	}
+	if dimensions != 768 {
+		t.Errorf("vector dimensions = %d, want 768", dimensions)
+	}
+
+	_, err = db.SQL.ExecContext(ctx,
+		`INSERT INTO journal_embeddings
+		 (id, journal_id, user_id, chunk_index, start_offset, end_offset, content_hash, embedding, embedding_model)
+		 VALUES ($1, $2, $3, 1, 0, 10, 'hash', '[0,0,0]'::vector, 'wrong')`,
+		uuid.NewString(), journalID, userID,
+	)
+	if err == nil {
+		t.Error("journal_embeddings accepted a vector with the wrong dimension")
+	}
+
+	memoryID := uuid.NewString()
+	exec(t, db,
+		`INSERT INTO personal_memories (id, user_id, content, confidence, source_count)
+		 VALUES ($1, $2, 'The user prefers concise answers.', 0.9, 1)`,
+		memoryID, userID,
+	)
+
+	exec(t, db,
+		`INSERT INTO memory_sources (id, memory_id, journal_id) VALUES ($1, $2, $3)`,
+		uuid.NewString(), memoryID, journalID,
+	)
+	_, err = db.SQL.ExecContext(ctx,
+		`INSERT INTO memory_sources (id, memory_id, journal_id, message_id) VALUES ($1, $2, $3, $4)`,
+		uuid.NewString(), memoryID, journalID, messageID,
+	)
+	requirePgError(t, err, "23514", "memory_sources_one_source_check")
+
+	insightID := uuid.NewString()
+	exec(t, db,
+		`INSERT INTO insights
+		 (id, user_id, title, summary, observation, interpretation, confidence,
+		  confidence_label, reflection_question, suggested_direction, generation_type)
+		 VALUES ($1, $2, 'Title', 'Summary', 'Observation', 'Interpretation', 0.7,
+		         'moderate', 'Does this fit?', 'improve', 'on_demand')`,
+		insightID, userID,
+	)
+
+	exec(t, db,
+		`INSERT INTO insight_evidence (id, insight_id, journal_id, note) VALUES ($1, $2, $3, 'evidence')`,
+		uuid.NewString(), insightID, journalID,
+	)
+	_, err = db.SQL.ExecContext(ctx,
+		`INSERT INTO insight_evidence (id, insight_id, journal_id, message_id, note)
+		 VALUES ($1, $2, $3, $4, 'two sources')`,
+		uuid.NewString(), insightID, journalID, messageID,
+	)
+	requirePgError(t, err, "23514", "insight_evidence_one_source_check")
+
+	exec(t, db,
+		`INSERT INTO scheduled_jobs (id, user_id, job_type, payload, run_at)
+		 VALUES ($1, $2, 'journal.embedding', '{}', now())`,
+		uuid.NewString(), userID,
+	)
+	_, err = db.SQL.ExecContext(ctx,
+		`INSERT INTO scheduled_jobs (id, user_id, job_type, run_at, attempts, max_attempts)
+		 VALUES ($1, $2, 'journal.embedding', now(), 4, 3)`,
+		uuid.NewString(), userID,
+	)
+	requirePgError(t, err, "23514", "scheduled_jobs_attempts_check")
+
+	assertIndexesExist(t, db, "scheduled_jobs", []string{
+		"scheduled_jobs_status_run_at_idx",
+		"scheduled_jobs_user_id_job_type_idx",
+		"scheduled_jobs_user_idempotency_key_idx",
+		"scheduled_jobs_claimable_idx",
+	})
+}
+
+func vectorLiteral(dimension int) string {
+	parts := make([]string, dimension)
+	for index := range parts {
+		parts[index] = "0"
+	}
+	return "[" + strings.Join(parts, ",") + "]"
 }
 
 func assertIndexesExist(t *testing.T, db *database.DB, table string, want []string) {
