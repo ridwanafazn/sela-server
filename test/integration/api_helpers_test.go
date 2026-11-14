@@ -135,12 +135,16 @@ func newAPI(t *testing.T, cfg *config.Config) (*gin.Engine, *database.DB) {
 	t.Helper()
 
 	db, _ := testdb.New(t)
-	router, err := app.BuildRouter(cfg, slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})), db)
+	router, err := app.BuildRouter(cfg, testLogger(), db)
 	if err != nil {
 		t.Fatalf("BuildRouter: %v", err)
 	}
 
 	return router, db
+}
+
+func testLogger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 }
 
 func do(t *testing.T, router *gin.Engine, method, path string, opts requestOptions) apiResult {
@@ -173,6 +177,8 @@ func do(t *testing.T, router *gin.Engine, method, path string, opts requestOptio
 
 	recorder := httptest.NewRecorder()
 	router.ServeHTTP(recorder, request)
+
+	validateResponseContract(t, request, recorder)
 
 	return apiResult{
 		Status: recorder.Code,
