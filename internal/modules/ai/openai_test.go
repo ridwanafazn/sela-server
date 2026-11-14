@@ -18,6 +18,12 @@ func TestOpenAIGenerate(t *testing.T) {
 		if r.Header.Get("Authorization") != "Bearer test-key" {
 			t.Errorf("authorization = %q", r.Header.Get("Authorization"))
 		}
+		if r.Header.Get("User-Agent") != "sela-server/1.0" {
+			t.Errorf("user-agent = %q", r.Header.Get("User-Agent"))
+		}
+		if r.Header.Get("x-opencode-session") != "session-123" {
+			t.Errorf("x-opencode-session = %q", r.Header.Get("x-opencode-session"))
+		}
 
 		var request struct {
 			Model    string `json:"model"`
@@ -46,8 +52,9 @@ func TestOpenAIGenerate(t *testing.T) {
 
 	provider := NewOpenAILLM(server.URL, "test-key", "test-model", 2*time.Second, 0)
 	response, err := provider.Generate(context.Background(), GenerateRequest{
-		System:   "System",
-		Messages: []Message{{Role: RoleUser, Content: "Hello"}},
+		System:    "System",
+		Messages:  []Message{{Role: RoleUser, Content: "Hello"}},
+		SessionID: "session-123",
 	})
 	if err != nil {
 		t.Fatalf("Generate: %v", err)

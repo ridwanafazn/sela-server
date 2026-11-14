@@ -92,7 +92,7 @@ func (o *OpenAI) Generate(ctx context.Context, request GenerateRequest) (*Genera
 		payload["response_format"] = map[string]string{"type": "json_object"}
 	}
 
-	body, err := o.post(ctx, "/chat/completions", payload)
+	body, err := o.post(ctx, "/chat/completions", payload, request.SessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -142,7 +142,7 @@ func (o *OpenAI) Embed(ctx context.Context, request EmbeddingRequest) (*Embeddin
 		"model":           model,
 		"input":           request.Texts,
 		"encoding_format": "float",
-	})
+	}, "")
 	if err != nil {
 		return nil, err
 	}
@@ -175,7 +175,7 @@ func (o *OpenAI) Embed(ctx context.Context, request EmbeddingRequest) (*Embeddin
 	}, nil
 }
 
-func (o *OpenAI) post(ctx context.Context, path string, payload any) ([]byte, error) {
+func (o *OpenAI) post(ctx context.Context, path string, payload any, sessionID string) ([]byte, error) {
 	encoded, err := json.Marshal(payload)
 	if err != nil {
 		return nil, fmt.Errorf("%w: encode request: %v", ErrInvalidRequest, err)
@@ -197,7 +197,7 @@ func (o *OpenAI) post(ctx context.Context, path string, payload any) ([]byte, er
 			}
 		}
 
-		body, err := o.attempt(ctx, path, encoded)
+		body, err := o.attempt(ctx, path, encoded, sessionID)
 		if err == nil {
 			return body, nil
 		}
@@ -210,7 +210,7 @@ func (o *OpenAI) post(ctx context.Context, path string, payload any) ([]byte, er
 	return nil, lastErr
 }
 
-func (o *OpenAI) attempt(ctx context.Context, path string, payload []byte) ([]byte, error) {
+func (o *OpenAI) attempt(ctx context.Context, path string, payload []byte, sessionID string) ([]byte, error) {
 	attemptCtx, cancel := context.WithTimeout(ctx, o.timeout)
 	defer cancel()
 
@@ -220,6 +220,10 @@ func (o *OpenAI) attempt(ctx context.Context, path string, payload []byte) ([]by
 	}
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Accept", "application/json")
+	request.Header.Set("User-Agent", "sela-server/1.0")
+	if sessionID != "" {
+		request.Header.Set("x-opencode-session", sessionID)
+	}
 	if o.apiKey != "" {
 		request.Header.Set("Authorization", "Bearer "+o.apiKey)
 	}

@@ -28,6 +28,7 @@ type GenerateRequest struct {
 	Temperature    float64
 	MaxTokens      int
 	ResponseSchema json.RawMessage
+	SessionID      string
 }
 
 // Usage records token consumption.
