@@ -1,0 +1,304 @@
+Project sela_database {
+  database_type: "PostgreSQL"
+  Note: "Conceptual MVP schema for SELA v1.1. SQL migrations are authoritative. Validate constraints, indexes, retention, and vector dimensions before production."
+}
+
+Table users {
+  id uuid [pk]
+  email citext [not null, unique]
+  password_hash text [not null]
+  status varchar(30) [not null, default: 'active']
+  email_verified_at timestamptz
+  deletion_requested_at timestamptz
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+  deleted_at timestamptz
+
+  Note: "status: active | deletion_pending | deleted. CHECK constraint required in SQL migration."
+}
+
+Table profiles {
+  id uuid [pk]
+  user_id uuid [not null, unique]
+  display_name varchar(100)
+  language varchar(10) [not null, default: 'id']
+  timezone varchar(100) [not null, default: 'Asia/Jakarta']
+  communication_style varchar(30) [not null, default: 'adaptive']
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+
+  Note: "communication_style: adaptive | direct | gentle | balanced. CHECK constraint required in SQL migration."
+}
+
+Table auth_sessions {
+  id uuid [pk]
+  user_id uuid [not null]
+  token_family_id uuid [not null]
+  refresh_token_hash text [not null, unique]
+  expires_at timestamptz [not null]
+  revoked_at timestamptz
+  replaced_by uuid
+  created_at timestamptz [not null]
+  last_used_at timestamptz
+
+  indexes {
+    (user_id, expires_at)
+    (token_family_id)
+  }
+
+  Note: "Refresh tokens are rotated. Reuse of a rotated token revokes the token family."
+}
+
+Table journals {
+  id uuid [pk]
+  user_id uuid [not null]
+  title varchar(200)
+  content text [not null]
+  entry_date date [not null]
+  status varchar(20) [not null, default: 'active']
+  version integer [not null, default: 1]
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+  deleted_at timestamptz
+
+  indexes {
+    (user_id, entry_date, id)
+    (user_id, status, updated_at)
+    (user_id, updated_at, id)
+  }
+
+  Note: "status: draft | active. version increments on every update and powers If-Match optimistic concurrency. Only active entries are eligible for embeddings, memory extraction, and insights. Add a generated tsvector column and GIN index in the SQL migration."
+}
+
+Table journal_embeddings {
+  id uuid [pk]
+  journal_id uuid [not null]
+  user_id uuid [not null]
+  chunk_index integer [not null]
+  start_offset integer [not null]
+  end_offset integer [not null]
+  content_hash text [not null]
+  embedding vector(768) [not null]
+  embedding_model varchar(100) [not null]
+  created_at timestamptz [not null]
+
+  indexes {
+    (journal_id, chunk_index) [unique]
+    (user_id)
+  }
+
+  Note: "Embedding is derived data. Source text is not duplicated; offsets and content_hash allow regeneration. Create an HNSW index after measuring query behavior."
+}
+
+Table conversations {
+  id uuid [pk]
+  user_id uuid [not null]
+  title varchar(200)
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+  deleted_at timestamptz
+
+  indexes {
+    (user_id, updated_at)
+  }
+}
+
+Table messages {
+  id uuid [pk]
+  conversation_id uuid [not null]
+  user_id uuid [not null]
+  role varchar(20) [not null]
+  content text [not null]
+  idempotency_key uuid
+  metadata jsonb
+  created_at timestamptz [not null]
+
+  indexes {
+    (conversation_id, created_at)
+    (user_id, created_at)
+    (conversation_id, idempotency_key) [unique]
+  }
+
+  Note: "role: user | assistant. System prompts are never stored in this table or exposed to the client."
+}
+
+Table personal_memories {
+  id uuid [pk]
+  user_id uuid [not null]
+  content text [not null]
+  category varchar(100)
+  status varchar(30) [not null, default: 'candidate']
+  confidence decimal(5,4)
+  source_count integer [not null, default: 0]
+  supersedes_memory_id uuid
+  last_confirmed_at timestamptz
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+  deleted_at timestamptz
+
+  indexes {
+    (user_id, status, updated_at)
+    (user_id, category)
+  }
+
+  Note: "status: candidate | active | rejected | superseded | deleted. CHECK confidence BETWEEN 0 AND 1 and source_count >= 0 in the SQL migration."
+}
+
+Table memory_sources {
+  id uuid [pk]
+  memory_id uuid [not null]
+  journal_id uuid
+  message_id uuid
+  source_excerpt text
+  created_at timestamptz [not null]
+
+  indexes {
+    (memory_id)
+  }
+
+  Note: "Exactly one of journal_id or message_id must be populated. Enforce with a PostgreSQL CHECK constraint."
+}
+
+Table insights {
+  id uuid [pk]
+  user_id uuid [not null]
+  title varchar(200) [not null]
+  summary text [not null]
+  observation text [not null]
+  interpretation text [not null]
+  hypothesis text
+  confidence decimal(5,4) [not null]
+  confidence_label varchar(20) [not null]
+  reflection_question text [not null]
+  suggested_direction varchar(20) [not null]
+  period_start date
+  period_end date
+  generation_type varchar(30) [not null]
+  model varchar(100)
+  prompt_version varchar(50)
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+  deleted_at timestamptz
+
+  indexes {
+    (user_id, created_at)
+    (user_id, period_start)
+  }
+
+  Note: "confidence_label: strong | moderate | limited. suggested_direction: improve | maintain | accept. generation_type: on_demand | weekly | monthly. CHECK confidence BETWEEN 0 AND 1 and period_start <= period_end in the SQL migration."
+}
+
+Table insight_evidence {
+  id uuid [pk]
+  insight_id uuid [not null]
+  journal_id uuid
+  message_id uuid
+  memory_id uuid
+  note text [not null]
+  source_deleted_at timestamptz
+  created_at timestamptz [not null]
+
+  indexes {
+    (insight_id)
+  }
+
+  Note: "Exactly one of journal_id, message_id, or memory_id must be populated. Enforce with a PostgreSQL CHECK constraint. source_deleted_at supports redaction after source deletion."
+}
+
+Table insight_feedback {
+  id uuid [pk]
+  insight_id uuid [not null]
+  user_id uuid [not null]
+  action varchar(20) [not null]
+  note text
+  created_at timestamptz [not null]
+
+  indexes {
+    (insight_id, created_at)
+    (user_id, created_at)
+  }
+
+  Note: "action: confirm | correct | reject. Insight content remains immutable; feedback is an audit record."
+}
+
+Table scheduled_jobs {
+  id uuid [pk]
+  user_id uuid
+  job_type varchar(100) [not null]
+  payload jsonb
+  status varchar(30) [not null, default: 'pending']
+  attempts integer [not null, default: 0]
+  max_attempts integer [not null, default: 3]
+  run_at timestamptz [not null]
+  locked_at timestamptz
+  locked_by varchar(200)
+  last_error text
+  idempotency_key uuid
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+
+  indexes {
+    (status, run_at)
+    (user_id, job_type)
+    (user_id, idempotency_key) [unique]
+  }
+
+  Note: "status: pending | processing | completed | retry | failed. CHECK attempts >= 0 AND attempts <= max_attempts in the SQL migration. Use a partial index for claimable jobs."
+}
+
+Table idempotency_keys {
+  id uuid [pk]
+  user_id uuid [not null]
+  key varchar(255) [not null]
+  endpoint varchar(200) [not null]
+  request_hash text [not null]
+  response_status integer
+  response_body jsonb
+  job_id uuid
+  expires_at timestamptz [not null]
+  created_at timestamptz [not null]
+
+  indexes {
+    (user_id, endpoint, key) [unique]
+    (expires_at)
+  }
+
+  Note: "Stores replayable responses for costly POST operations. TTL is 24 hours."
+}
+
+Ref: profiles.user_id - users.id
+
+Ref: auth_sessions.user_id > users.id
+Ref: auth_sessions.replaced_by > auth_sessions.id
+
+Ref: journals.user_id > users.id
+
+Ref: journal_embeddings.journal_id > journals.id
+Ref: journal_embeddings.user_id > users.id
+
+Ref: conversations.user_id > users.id
+
+Ref: messages.conversation_id > conversations.id
+Ref: messages.user_id > users.id
+
+Ref: personal_memories.user_id > users.id
+Ref: personal_memories.supersedes_memory_id > personal_memories.id
+
+Ref: memory_sources.memory_id > personal_memories.id
+Ref: memory_sources.journal_id > journals.id
+Ref: memory_sources.message_id > messages.id
+
+Ref: insights.user_id > users.id
+
+Ref: insight_evidence.insight_id > insights.id
+Ref: insight_evidence.journal_id > journals.id
+Ref: insight_evidence.message_id > messages.id
+Ref: insight_evidence.memory_id > personal_memories.id
+
+Ref: insight_feedback.insight_id > insights.id
+Ref: insight_feedback.user_id > users.id
+
+Ref: scheduled_jobs.user_id > users.id
+
+Ref: idempotency_keys.user_id > users.id
+Ref: idempotency_keys.job_id > scheduled_jobs.id

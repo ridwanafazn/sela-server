@@ -1,0 +1,1794 @@
+openapi: 3.1.0
+
+info:
+  title: SELA API
+  version: 1.2.0
+  description: |
+    REST API for SELA, a personal AI journaling and companion platform.
+
+    Product philosophy:
+    Remember. Understand. Grow.
+
+    This document is the single machine-readable API contract for the MVP.
+    It reflects the P0 decisions: OpenAPI as the canonical contract,
+    asynchronous insight generation, server-side journal drafts, rotating
+    refresh tokens, asynchronous account deletion, and explicit evidence
+    for insights.
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+
+servers:
+  - url: https://api.example.com/api/v1
+    description: Production placeholder
+  - url: http://localhost:8080/api/v1
+    description: Local development
+
+tags:
+  - name: Health
+    description: Liveness and readiness checks.
+  - name: Authentication
+    description: Registration, login, refresh, and logout.
+  - name: Profile
+    description: Current user identity, profile, and account lifecycle.
+  - name: Journals
+    description: Journal entries, drafts, and search.
+  - name: Conversations
+    description: Companion conversations and messages.
+  - name: Memories
+    description: Personal memory review and feedback.
+  - name: Insights
+    description: Asynchronous insight generation, evidence, and feedback.
+
+security:
+  - BearerAuth: []
+
+paths:
+
+  /health/live:
+    get:
+      tags: [Health]
+      operationId: healthLive
+      summary: Check process liveness
+      security: []
+      responses:
+        "200":
+          description: Process is alive
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /health/ready:
+    get:
+      tags: [Health]
+      operationId: healthReady
+      summary: Check service readiness
+      security: []
+      responses:
+        "200":
+          description: Service is ready
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /auth/register:
+    post:
+      tags: [Authentication]
+      operationId: register
+      summary: Register a new account
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "201":
+          description: Account created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /auth/login:
+    post:
+      tags: [Authentication]
+      operationId: login
+      summary: Authenticate a user
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Authentication successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /auth/refresh:
+    post:
+      tags: [Authentication]
+      operationId: refreshToken
+      summary: Rotate a refresh token and issue a new access token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshTokenRequest"
+      responses:
+        "200":
+          description: Session refreshed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /auth/logout:
+    post:
+      tags: [Authentication]
+      operationId: logout
+      summary: Revoke the current session
+      responses:
+        "204":
+          description: Session revoked
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /me:
+    get:
+      tags: [Profile]
+      operationId: getMe
+      summary: Get the current user, profile, and communication preferences
+      responses:
+        "200":
+          description: Current user and profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MeResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    patch:
+      tags: [Profile]
+      operationId: updateMe
+      summary: Update the current profile and communication preferences
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateMeRequest"
+      responses:
+        "200":
+          description: Profile updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MeResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    delete:
+      tags: [Profile]
+      operationId: deleteMe
+      summary: Deactivate the account and schedule data deletion
+      description: |
+        Requires re-authentication. The account is deactivated immediately.
+        Data purge runs asynchronously. The client must clear local session
+        state after a successful response.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeleteAccountRequest"
+      responses:
+        "202":
+          description: Account deletion accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeletionResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /journals:
+    get:
+      tags: [Journals]
+      operationId: listJournals
+      summary: List journal entries
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+        - name: q
+          in: query
+          description: Full-text search query over title and content.
+          schema:
+            type: string
+            maxLength: 200
+        - name: status
+          in: query
+          description: Filter by journal status.
+          schema:
+            type: string
+            enum: [all, active, draft]
+            default: all
+        - name: from
+          in: query
+          description: Inclusive lower bound for entry_date.
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          description: Inclusive upper bound for entry_date.
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: Journal list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JournalListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      tags: [Journals]
+      operationId: createJournal
+      summary: Create a journal entry or draft
+      description: |
+        Creates a journal entry or draft. The Idempotency-Key header is
+        required so an offline outbox can retry safely without duplicates.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateJournalRequest"
+      responses:
+        "201":
+          description: Journal created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JournalResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /journals/{journalId}:
+    parameters:
+      - $ref: "#/components/parameters/JournalId"
+    get:
+      tags: [Journals]
+      operationId: getJournal
+      summary: Get a journal entry
+      responses:
+        "200":
+          description: Journal retrieved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JournalResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Journals]
+      operationId: updateJournal
+      summary: Update a journal entry or draft
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateJournalRequest"
+      responses:
+        "200":
+          description: Journal updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JournalResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+    delete:
+      tags: [Journals]
+      operationId: deleteJournal
+      summary: Delete a journal entry
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+      responses:
+        "204":
+          description: Journal deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+
+  /journal-changes:
+    get:
+      tags: [Journals]
+      operationId: listJournalChanges
+      summary: List journal changes for offline synchronization
+      description: |
+        Returns journal records ordered by updated_at and id, including
+        tombstones. Use the opaque cursor for incremental synchronization.
+        The first request without a cursor starts from the oldest change.
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Journal changes
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JournalChangeListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /conversations:
+    get:
+      tags: [Conversations]
+      operationId: listConversations
+      summary: List conversations
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Conversation list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConversationListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      tags: [Conversations]
+      operationId: createConversation
+      summary: Create a conversation
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateConversationRequest"
+      responses:
+        "201":
+          description: Conversation created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConversationResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /conversations/{conversationId}:
+    parameters:
+      - $ref: "#/components/parameters/ConversationId"
+    get:
+      tags: [Conversations]
+      operationId: getConversation
+      summary: Get conversation details
+      responses:
+        "200":
+          description: Conversation retrieved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConversationResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Conversations]
+      operationId: deleteConversation
+      summary: Delete a conversation
+      responses:
+        "204":
+          description: Conversation deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /conversations/{conversationId}/messages:
+    parameters:
+      - $ref: "#/components/parameters/ConversationId"
+    get:
+      tags: [Conversations]
+      operationId: listMessages
+      summary: List messages in a conversation
+      parameters:
+        - name: before
+          in: query
+          description: Return messages older than this opaque cursor.
+          schema:
+            type: string
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Conversation messages in ascending chronological order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [Conversations]
+      operationId: sendMessage
+      summary: Send a message and request an AI response
+      description: |
+        The backend persists the user message, retrieves authorized context,
+        and generates the assistant response. The mobile client must not call
+        an LLM provider directly.
+
+        Retries must reuse the same Idempotency-Key.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendMessageRequest"
+      responses:
+        "200":
+          description: AI response generated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SendMessageResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "502":
+          $ref: "#/components/responses/BadGateway"
+        "504":
+          $ref: "#/components/responses/GatewayTimeout"
+
+  /memories:
+    get:
+      tags: [Memories]
+      operationId: listMemories
+      summary: List personal memories
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [all, active, candidate, rejected, superseded]
+            default: all
+        - name: category
+          in: query
+          schema:
+            type: string
+            maxLength: 100
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Memory list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemoryListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /memories/{memoryId}:
+    parameters:
+      - $ref: "#/components/parameters/MemoryId"
+    get:
+      tags: [Memories]
+      operationId: getMemory
+      summary: Get a memory with its source references
+      responses:
+        "200":
+          description: Memory retrieved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemoryResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Memories]
+      operationId: updateMemory
+      summary: Correct a memory's content or category
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateMemoryRequest"
+      responses:
+        "200":
+          description: Memory updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemoryResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Memories]
+      operationId: deleteMemory
+      summary: Delete a memory
+      responses:
+        "204":
+          description: Memory deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /memories/{memoryId}/feedback:
+    parameters:
+      - $ref: "#/components/parameters/MemoryId"
+    post:
+      tags: [Memories]
+      operationId: submitMemoryFeedback
+      summary: Confirm, correct, or reject a memory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MemoryFeedbackRequest"
+      responses:
+        "200":
+          description: Feedback recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemoryResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /insights:
+    get:
+      tags: [Insights]
+      operationId: listInsights
+      summary: List completed insights
+      parameters:
+        - name: period
+          in: query
+          schema:
+            type: string
+            enum: [all, weekly, monthly]
+            default: all
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Insight list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InsightListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      tags: [Insights]
+      operationId: generateInsight
+      summary: Request asynchronous insight generation
+      description: |
+        Returns HTTP 202 with a job identifier. Poll the job status operation
+        with the server-provided retry_after_seconds value.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GenerateInsightRequest"
+      responses:
+        "202":
+          description: Insight generation accepted
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InsightJobAccepted"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /insight-jobs/{jobId}:
+    parameters:
+      - $ref: "#/components/parameters/JobId"
+    get:
+      tags: [Insights]
+      operationId: getInsightJob
+      summary: Get insight generation job status
+      responses:
+        "200":
+          description: Job status
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InsightJobResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /insights/{insightId}:
+    parameters:
+      - $ref: "#/components/parameters/InsightId"
+    get:
+      tags: [Insights]
+      operationId: getInsight
+      summary: Get an insight with evidence and feedback
+      responses:
+        "200":
+          description: Insight retrieved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InsightResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Insights]
+      operationId: deleteInsight
+      summary: Delete an insight
+      responses:
+        "204":
+          description: Insight deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /insights/{insightId}/feedback:
+    parameters:
+      - $ref: "#/components/parameters/InsightId"
+    post:
+      tags: [Insights]
+      operationId: submitInsightFeedback
+      summary: Confirm, correct, or reject an insight
+      description: |
+        Insight content is immutable. Feedback records the user's assessment
+        and an optional note. Use action "correct" with a note to explain what
+        was inaccurate.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InsightFeedbackRequest"
+      responses:
+        "200":
+          description: Feedback recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InsightResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+components:
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    JournalId:
+      name: journalId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+    ConversationId:
+      name: conversationId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+    MemoryId:
+      name: memoryId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+    InsightId:
+      name: insightId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+    JobId:
+      name: jobId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+    Cursor:
+      name: cursor
+      in: query
+      schema:
+        type: string
+
+    Limit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Client-generated UUID used to make costly POST operations retry-safe.
+      schema:
+        type: string
+        format: uuid
+
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: Journal version returned by the last read or write.
+      schema:
+        type: integer
+        minimum: 1
+
+  headers:
+    RetryAfter:
+      description: Seconds the client should wait before retrying or polling.
+      schema:
+        type: integer
+        minimum: 1
+
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+    Unauthorized:
+      description: Authentication required or invalid
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+    NotFound:
+      description: Resource not found or not owned by the caller
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+    Conflict:
+      description: Resource, version, or idempotency conflict
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+    PreconditionRequired:
+      description: If-Match header is required
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+    RateLimited:
+      description: Request rate limit exceeded
+      headers:
+        Retry-After:
+          $ref: "#/components/headers/RetryAfter"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+    BadGateway:
+      description: Upstream AI provider error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+    GatewayTimeout:
+      description: Upstream AI provider timeout
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+    ServiceUnavailable:
+      description: Service is not ready
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+  schemas:
+
+    HealthResponse:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          example: ok
+        checks:
+          type: object
+          additionalProperties:
+            type: string
+          example:
+            database: ok
+            migrations: ok
+
+    ErrorDetail:
+      type: object
+      required: [code, message]
+      properties:
+        field:
+          type: [string, "null"]
+        code:
+          type: string
+        message:
+          type: string
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, details]
+          properties:
+            code:
+              type: string
+              example: VALIDATION_ERROR
+            message:
+              type: string
+              example: The request is invalid.
+            details:
+              type: array
+              items:
+                $ref: "#/components/schemas/ErrorDetail"
+            request_id:
+              type: [string, "null"]
+
+    CursorPagination:
+      type: object
+      required: [next_cursor, has_more]
+      properties:
+        next_cursor:
+          type: [string, "null"]
+        has_more:
+          type: boolean
+          default: false
+
+    User:
+      type: object
+      required: [id, email, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        created_at:
+          type: string
+          format: date-time
+
+    CommunicationStyle:
+      type: string
+      enum: [adaptive, direct, gentle, balanced]
+
+    Profile:
+      type: object
+      required: [display_name, language, timezone, communication_style]
+      properties:
+        display_name:
+          type: [string, "null"]
+        language:
+          type: string
+          example: id
+        timezone:
+          type: string
+          example: Asia/Jakarta
+        communication_style:
+          $ref: "#/components/schemas/CommunicationStyle"
+
+    Me:
+      type: object
+      required: [user, profile]
+      properties:
+        user:
+          $ref: "#/components/schemas/User"
+        profile:
+          $ref: "#/components/schemas/Profile"
+
+    MeResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/Me"
+
+    RegisterRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+          minLength: 8
+        display_name:
+          type: string
+          maxLength: 100
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+
+    RefreshTokenRequest:
+      type: object
+      required: [refresh_token]
+      properties:
+        refresh_token:
+          type: string
+
+    AuthResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [user, access_token, refresh_token, token_type, expires_in]
+          properties:
+            user:
+              $ref: "#/components/schemas/User"
+            access_token:
+              type: string
+            refresh_token:
+              type: string
+            token_type:
+              type: string
+              example: Bearer
+            expires_in:
+              type: integer
+              description: Access token lifetime in seconds.
+              example: 900
+
+    UpdateMeRequest:
+      type: object
+      properties:
+        display_name:
+          type: [string, "null"]
+          maxLength: 100
+        language:
+          type: string
+        timezone:
+          type: string
+        communication_style:
+          $ref: "#/components/schemas/CommunicationStyle"
+
+    DeleteAccountRequest:
+      type: object
+      required: [password, confirmation]
+      properties:
+        password:
+          type: string
+          format: password
+        confirmation:
+          type: string
+          const: DELETE
+
+    DeletionResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [status, purge_scheduled_at, message]
+          properties:
+            status:
+              type: string
+              enum: [pending]
+            purge_scheduled_at:
+              type: string
+              format: date-time
+            message:
+              type: string
+
+    JournalStatus:
+      type: string
+      enum: [draft, active]
+
+    Journal:
+      type: object
+      required: [id, content, entry_date, status, version, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: [string, "null"]
+        content:
+          type: string
+        entry_date:
+          type: string
+          format: date
+        status:
+          $ref: "#/components/schemas/JournalStatus"
+        version:
+          type: integer
+          minimum: 1
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    JournalResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/Journal"
+
+    JournalListResponse:
+      type: object
+      required: [data, pagination]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Journal"
+        pagination:
+          $ref: "#/components/schemas/CursorPagination"
+
+    JournalChange:
+      type: object
+      required: [id, version, updated_at, deleted_at, journal]
+      properties:
+        id:
+          type: string
+          format: uuid
+        version:
+          type: integer
+          minimum: 1
+        updated_at:
+          type: string
+          format: date-time
+        deleted_at:
+          type: [string, "null"]
+          format: date-time
+        journal:
+          oneOf:
+            - $ref: "#/components/schemas/Journal"
+            - type: "null"
+
+    SyncMetadata:
+      type: object
+      required: [server_time]
+      properties:
+        server_time:
+          type: string
+          format: date-time
+
+    JournalChangeListResponse:
+      type: object
+      required: [data, pagination, sync]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/JournalChange"
+        pagination:
+          $ref: "#/components/schemas/CursorPagination"
+        sync:
+          $ref: "#/components/schemas/SyncMetadata"
+
+    CreateJournalRequest:
+      type: object
+      required: [content]
+      properties:
+        title:
+          type: string
+          maxLength: 200
+        content:
+          type: string
+          minLength: 1
+        entry_date:
+          type: string
+          format: date
+        status:
+          $ref: "#/components/schemas/JournalStatus"
+
+    UpdateJournalRequest:
+      type: object
+      properties:
+        title:
+          type: [string, "null"]
+          maxLength: 200
+        content:
+          type: string
+          minLength: 1
+        entry_date:
+          type: string
+          format: date
+        status:
+          $ref: "#/components/schemas/JournalStatus"
+
+    Conversation:
+      type: object
+      required: [id, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: [string, "null"]
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    ConversationResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/Conversation"
+
+    ConversationListResponse:
+      type: object
+      required: [data, pagination]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Conversation"
+        pagination:
+          $ref: "#/components/schemas/CursorPagination"
+
+    CreateConversationRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          maxLength: 200
+
+    MessageRole:
+      type: string
+      enum: [user, assistant]
+
+    Message:
+      type: object
+      required: [id, role, content, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        role:
+          $ref: "#/components/schemas/MessageRole"
+        content:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    MessageListResponse:
+      type: object
+      required: [data, pagination]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Message"
+        pagination:
+          $ref: "#/components/schemas/CursorPagination"
+
+    SendMessageRequest:
+      type: object
+      required: [content]
+      properties:
+        content:
+          type: string
+          minLength: 1
+          maxLength: 20000
+
+    SendMessageResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [user_message, assistant_message]
+          properties:
+            user_message:
+              $ref: "#/components/schemas/Message"
+            assistant_message:
+              $ref: "#/components/schemas/Message"
+
+    MemoryStatus:
+      type: string
+      enum: [candidate, active, rejected, superseded]
+
+    Memory:
+      type: object
+      required: [id, content, status, confidence, source_count, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        content:
+          type: string
+        category:
+          type: [string, "null"]
+        status:
+          $ref: "#/components/schemas/MemoryStatus"
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+        source_count:
+          type: integer
+          minimum: 0
+        supersedes_memory_id:
+          type: [string, "null"]
+          format: uuid
+        last_confirmed_at:
+          type: [string, "null"]
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    MemorySource:
+      type: object
+      required: [id, source_type, source_id, source_deleted]
+      properties:
+        id:
+          type: string
+          format: uuid
+        source_type:
+          type: string
+          enum: [journal, message]
+        source_id:
+          type: string
+          format: uuid
+        source_date:
+          type: [string, "null"]
+          format: date-time
+        excerpt:
+          type: [string, "null"]
+        source_deleted:
+          type: boolean
+
+    MemoryDetail:
+      allOf:
+        - $ref: "#/components/schemas/Memory"
+        - type: object
+          required: [sources]
+          properties:
+            sources:
+              type: array
+              items:
+                $ref: "#/components/schemas/MemorySource"
+
+    MemoryResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/MemoryDetail"
+
+    MemoryListResponse:
+      type: object
+      required: [data, pagination]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Memory"
+        pagination:
+          $ref: "#/components/schemas/CursorPagination"
+
+    UpdateMemoryRequest:
+      type: object
+      properties:
+        content:
+          type: string
+          minLength: 1
+        category:
+          type: [string, "null"]
+          maxLength: 100
+
+    MemoryFeedbackRequest:
+      type: object
+      required: [action]
+      properties:
+        action:
+          type: string
+          enum: [confirm, correct, reject]
+        corrected_content:
+          type: [string, "null"]
+      if:
+        properties:
+          action:
+            const: correct
+        required: [action]
+      then:
+        properties:
+          corrected_content:
+            type: string
+            minLength: 1
+        required: [corrected_content]
+
+    ConfidenceLabel:
+      type: string
+      enum: [strong, moderate, limited]
+
+    SuggestedDirection:
+      type: string
+      enum: [improve, maintain, accept]
+
+    GenerationType:
+      type: string
+      enum: [on_demand, weekly, monthly]
+
+    InsightFeedbackStatus:
+      type: string
+      enum: [none, confirmed, corrected, rejected]
+
+    InsightEvidence:
+      type: object
+      required: [id, source_type, source_id, note, source_deleted]
+      properties:
+        id:
+          type: string
+          format: uuid
+        source_type:
+          type: string
+          enum: [journal, message, memory]
+        source_id:
+          type: string
+          format: uuid
+        note:
+          type: string
+        source_date:
+          type: [string, "null"]
+          format: date-time
+        source_deleted:
+          type: boolean
+
+    InsightFeedback:
+      type: object
+      required: [status, note, updated_at]
+      properties:
+        status:
+          $ref: "#/components/schemas/InsightFeedbackStatus"
+        note:
+          type: [string, "null"]
+        updated_at:
+          type: [string, "null"]
+          format: date-time
+
+    Insight:
+      type: object
+      required:
+        - id
+        - title
+        - summary
+        - observation
+        - interpretation
+        - confidence
+        - confidence_label
+        - reflection_question
+        - suggested_direction
+        - generation_type
+        - evidence
+        - feedback
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        summary:
+          type: string
+        observation:
+          type: string
+        interpretation:
+          type: string
+        hypothesis:
+          type: [string, "null"]
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+        confidence_label:
+          $ref: "#/components/schemas/ConfidenceLabel"
+        reflection_question:
+          type: string
+        suggested_direction:
+          $ref: "#/components/schemas/SuggestedDirection"
+        period_start:
+          type: [string, "null"]
+          format: date
+        period_end:
+          type: [string, "null"]
+          format: date
+        generation_type:
+          $ref: "#/components/schemas/GenerationType"
+        evidence:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/InsightEvidence"
+        feedback:
+          $ref: "#/components/schemas/InsightFeedback"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    InsightListItem:
+      type: object
+      required:
+        - id
+        - title
+        - summary
+        - confidence
+        - confidence_label
+        - suggested_direction
+        - generation_type
+        - evidence_count
+        - feedback
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        summary:
+          type: string
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+        confidence_label:
+          $ref: "#/components/schemas/ConfidenceLabel"
+        suggested_direction:
+          $ref: "#/components/schemas/SuggestedDirection"
+        period_start:
+          type: [string, "null"]
+          format: date
+        period_end:
+          type: [string, "null"]
+          format: date
+        generation_type:
+          $ref: "#/components/schemas/GenerationType"
+        evidence_count:
+          type: integer
+          minimum: 0
+        feedback:
+          $ref: "#/components/schemas/InsightFeedback"
+        created_at:
+          type: string
+          format: date-time
+
+    InsightResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/Insight"
+
+    InsightListResponse:
+      type: object
+      required: [data, pagination]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/InsightListItem"
+        pagination:
+          $ref: "#/components/schemas/CursorPagination"
+
+    GenerateInsightRequest:
+      type: object
+      required: [period]
+      properties:
+        period:
+          type: string
+          enum: [weekly, monthly, custom]
+        start_date:
+          type: string
+          format: date
+        end_date:
+          type: string
+          format: date
+        focus:
+          type: string
+          maxLength: 500
+      if:
+        properties:
+          period:
+            const: custom
+        required: [period]
+      then:
+        properties:
+          start_date:
+            type: string
+            format: date
+          end_date:
+            type: string
+            format: date
+        required: [start_date, end_date]
+
+    InsightJobStatus:
+      type: string
+      enum: [queued, processing, completed, failed]
+
+    InsightJobOutcome:
+      type: string
+      enum: [insight_created, insufficient_evidence]
+
+    InsightJobError:
+      type: object
+      required: [code, message, retryable]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        retryable:
+          type: boolean
+
+    InsightJobAccepted:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [job_id, status, status_url, retry_after_seconds]
+          properties:
+            job_id:
+              type: string
+              format: uuid
+            status:
+              type: string
+              enum: [queued]
+            status_url:
+              type: string
+            retry_after_seconds:
+              type: integer
+              minimum: 1
+
+    InsightJob:
+      type: object
+      required:
+        - job_id
+        - status
+        - outcome
+        - insight_id
+        - message
+        - retry_after_seconds
+        - created_at
+        - updated_at
+      properties:
+        job_id:
+          type: string
+          format: uuid
+        status:
+          $ref: "#/components/schemas/InsightJobStatus"
+        outcome:
+          oneOf:
+            - $ref: "#/components/schemas/InsightJobOutcome"
+            - type: "null"
+        insight_id:
+          type: [string, "null"]
+          format: uuid
+        message:
+          type: [string, "null"]
+        error:
+          oneOf:
+            - $ref: "#/components/schemas/InsightJobError"
+            - type: "null"
+        retry_after_seconds:
+          type: integer
+          minimum: 1
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    InsightJobResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/InsightJob"
+
+    InsightFeedbackRequest:
+      type: object
+      required: [action]
+      properties:
+        action:
+          type: string
+          enum: [confirm, correct, reject]
+        note:
+          type: [string, "null"]
+      if:
+        properties:
+          action:
+            const: correct
+        required: [action]
+      then:
+        properties:
+          note:
+            type: string
+            minLength: 1
+        required: [note]
