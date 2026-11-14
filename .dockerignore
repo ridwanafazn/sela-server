@@ -1,0 +1,27 @@
+# Git and local tooling
+.git
+.gitignore
+.github
+.neon
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+
+# Build and test output
+bin/
+dist/
+coverage.out
+*.test
+*.exe
+
+# Editors and operating systems
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Documentation is not required to build the image
+docs/
+README.md

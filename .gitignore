@@ -1,0 +1,20 @@
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Neon CLI project link
+.neon
+
+# Build output
+/bin/
+/dist/
+*.exe
+*.test
+coverage.out
+
+# Editors and operating systems
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
