@@ -17,7 +17,8 @@ const (
 
 // Job types.
 const (
-	TypeJournalEmbedding = "journal.embedding"
+	TypeJournalEmbedding        = "journal.embedding"
+	TypeJournalMemoryExtraction = "journal.memory_extraction"
 )
 
 // Job is a durable scheduled task.

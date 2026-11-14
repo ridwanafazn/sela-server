@@ -183,6 +183,38 @@ func (r *Repository) SoftDeleteTx(tx *gorm.DB, id, userID string, version int, n
 	).Error
 }
 
+// DowngradeMemoriesForDeletedJournalTx re-evaluates memories whose only
+// remaining sources are soft-deleted journals. They return to candidate status
+// with zero sources for user review.
+func (r *Repository) DowngradeMemoriesForDeletedJournalTx(tx *gorm.DB, userID, journalID string, now time.Time) error {
+	return tx.Exec(
+		`UPDATE personal_memories m
+		 SET status = CASE WHEN m.status = 'active' THEN 'candidate' ELSE m.status END,
+		     source_count = (
+		       SELECT count(*)
+		       FROM memory_sources ms2
+		       LEFT JOIN journals j2 ON j2.id = ms2.journal_id
+		       WHERE ms2.memory_id = m.id
+		         AND (ms2.journal_id IS NULL OR j2.deleted_at IS NULL)
+		     ),
+		     updated_at = ?
+		 WHERE m.user_id = ?
+		   AND m.deleted_at IS NULL
+		   AND EXISTS (
+		     SELECT 1 FROM memory_sources ms
+		     WHERE ms.memory_id = m.id AND ms.journal_id = ?
+		   )
+		   AND NOT EXISTS (
+		     SELECT 1
+		     FROM memory_sources ms3
+		     LEFT JOIN journals j3 ON j3.id = ms3.journal_id
+		     WHERE ms3.memory_id = m.id
+		       AND (ms3.journal_id IS NULL OR j3.deleted_at IS NULL)
+		   )`,
+		now, userID, journalID,
+	).Error
+}
+
 // GetByIDForProcessing returns a journal for the worker, including
 // soft-deleted rows.
 func (r *Repository) GetByIDForProcessing(ctx context.Context, id string) (*Journal, error) {

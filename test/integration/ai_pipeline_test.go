@@ -58,6 +58,15 @@ func TestEmbeddingPipelineAndHybridRetrieval(t *testing.T) {
 	if pending != 2 {
 		t.Fatalf("pending embedding jobs = %d, want 2 (active journals only)", pending)
 	}
+	if err := db.SQL.QueryRowContext(ctx,
+		`SELECT count(*) FROM scheduled_jobs WHERE user_id = $1 AND job_type = $2 AND status = 'pending'`,
+		user.User.ID, job.TypeJournalMemoryExtraction,
+	).Scan(&pending); err != nil {
+		t.Fatalf("count extraction jobs: %v", err)
+	}
+	if pending != 2 {
+		t.Fatalf("pending memory extraction jobs = %d, want 2 (active journals only)", pending)
+	}
 
 	repo := journal.NewRepository(db.Gorm)
 	embeddings := ai.NewFakeEmbedding(768)
@@ -73,6 +82,9 @@ func TestEmbeddingPipelineAndHybridRetrieval(t *testing.T) {
 				return err
 			}
 			return embeddingService.ProcessJournal(ctx, payload.JournalID)
+		}),
+		job.TypeJournalMemoryExtraction: job.HandlerFunc(func(context.Context, *job.Job) error {
+			return nil
 		}),
 		"test.retry": job.HandlerFunc(func(context.Context, *job.Job) error {
 			return ai.ErrRateLimited

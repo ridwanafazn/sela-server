@@ -19,6 +19,7 @@ import (
 	"github.com/ridwanafazn/sela-server/internal/modules/conversation"
 	"github.com/ridwanafazn/sela-server/internal/modules/job"
 	"github.com/ridwanafazn/sela-server/internal/modules/journal"
+	"github.com/ridwanafazn/sela-server/internal/modules/memory"
 	"github.com/ridwanafazn/sela-server/internal/modules/user"
 	"github.com/ridwanafazn/sela-server/internal/platform/database"
 	"github.com/ridwanafazn/sela-server/internal/platform/httpx"
@@ -87,9 +88,14 @@ func BuildRouter(cfg *config.Config, log *slog.Logger, db *database.DB) (*gin.En
 		cfg.AI.EmbeddingDimension,
 		log,
 	)
+	memoryRepo := memory.NewRepository(db.Gorm)
+	memoryService := memory.NewService(memoryRepo, log)
+	memoryHandler := memory.NewHandler(memoryService)
+
 	conversationService := conversation.NewService(
 		conversation.NewRepository(db.Gorm),
 		retrieval,
+		memoryService,
 		llm,
 		limiter,
 		conversation.Limits{CompanionPerMinute: cfg.RateLimit.CompanionPerMinute},
@@ -128,6 +134,12 @@ func BuildRouter(cfg *config.Config, log *slog.Logger, db *database.DB) (*gin.En
 			protected.DELETE("/conversations/:conversationId", conversationHandler.Delete)
 			protected.GET("/conversations/:conversationId/messages", conversationHandler.ListMessages)
 			protected.POST("/conversations/:conversationId/messages", conversationHandler.SendMessage)
+
+			protected.GET("/memories", memoryHandler.List)
+			protected.GET("/memories/:memoryId", memoryHandler.Get)
+			protected.PATCH("/memories/:memoryId", memoryHandler.Update)
+			protected.DELETE("/memories/:memoryId", memoryHandler.Delete)
+			protected.POST("/memories/:memoryId/feedback", memoryHandler.Feedback)
 		},
 	}), nil
 }

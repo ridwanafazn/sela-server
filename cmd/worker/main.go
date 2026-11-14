@@ -15,6 +15,7 @@ import (
 	"github.com/ridwanafazn/sela-server/internal/modules/ai"
 	"github.com/ridwanafazn/sela-server/internal/modules/job"
 	"github.com/ridwanafazn/sela-server/internal/modules/journal"
+	"github.com/ridwanafazn/sela-server/internal/modules/memory"
 	"github.com/ridwanafazn/sela-server/internal/platform/database"
 	"github.com/ridwanafazn/sela-server/internal/platform/logger"
 )
@@ -52,6 +53,10 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	llm, err := ai.NewLLM(cfg.AI)
+	if err != nil {
+		return err
+	}
 
 	embeddingModel := cfg.AI.EmbeddingModelName()
 
@@ -60,6 +65,12 @@ func run() error {
 		embeddings,
 		embeddingModel,
 		cfg.AI.EmbeddingDimension,
+		log,
+	)
+	extractionService := memory.NewExtractionService(
+		memory.NewRepository(db.Gorm),
+		llm,
+		cfg.AI.Model,
 		log,
 	)
 
@@ -76,6 +87,18 @@ func run() error {
 				return fmt.Errorf("%w: embedding payload is missing journal_id", ai.ErrInvalidRequest)
 			}
 			return embeddingService.ProcessJournal(ctx, payload.JournalID)
+		}),
+		job.TypeJournalMemoryExtraction: job.HandlerFunc(func(ctx context.Context, claimed *job.Job) error {
+			var payload struct {
+				JournalID string `json:"journal_id"`
+			}
+			if err := json.Unmarshal(claimed.Payload, &payload); err != nil {
+				return fmt.Errorf("%w: decode memory extraction payload: %v", ai.ErrInvalidRequest, err)
+			}
+			if payload.JournalID == "" {
+				return fmt.Errorf("%w: memory extraction payload is missing journal_id", ai.ErrInvalidRequest)
+			}
+			return extractionService.ProcessJournal(ctx, payload.JournalID)
 		}),
 	}
 

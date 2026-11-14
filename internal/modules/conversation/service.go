@@ -15,6 +15,7 @@ import (
 
 	"github.com/ridwanafazn/sela-server/internal/modules/ai"
 	"github.com/ridwanafazn/sela-server/internal/modules/journal"
+	"github.com/ridwanafazn/sela-server/internal/modules/memory"
 	"github.com/ridwanafazn/sela-server/internal/platform/ratelimit"
 	"github.com/ridwanafazn/sela-server/internal/shared/apierrors"
 	"github.com/ridwanafazn/sela-server/internal/shared/ids"
@@ -40,6 +41,7 @@ type Limits struct {
 type Service struct {
 	repo      *Repository
 	retrieval *journal.RetrievalService
+	memories  MemoryRetriever
 	llm       ai.LLMProvider
 	limiter   *ratelimit.Limiter
 	limits    Limits
@@ -48,10 +50,17 @@ type Service struct {
 	now       func() time.Time
 }
 
+// MemoryRetriever returns confirmed and candidate memories relevant to a
+// message.
+type MemoryRetriever interface {
+	Retrieve(ctx context.Context, userID, query string, limit int) ([]memory.RetrievedMemory, error)
+}
+
 // NewService creates the Companion service.
 func NewService(
 	repo *Repository,
 	retrieval *journal.RetrievalService,
+	memories MemoryRetriever,
 	llm ai.LLMProvider,
 	limiter *ratelimit.Limiter,
 	limits Limits,
@@ -64,6 +73,7 @@ func NewService(
 	return &Service{
 		repo:      repo,
 		retrieval: retrieval,
+		memories:  memories,
 		llm:       llm,
 		limiter:   limiter,
 		limits:    limits,
@@ -362,7 +372,16 @@ func (s *Service) SendMessage(ctx context.Context, userID, conversationID, idemp
 		retrieved = nil
 	}
 
-	systemPrompt, err := BuildSystemPrompt(language, style, retrieved)
+	memoriesUsed, err := s.retrieveMemories(ctx, userID, content)
+	if err != nil {
+		s.log.WarnContext(ctx, "companion memory retrieval failed",
+			slog.String("conversation_id", conversationID),
+			slog.String("error", err.Error()),
+		)
+		memoriesUsed = nil
+	}
+
+	systemPrompt, err := BuildSystemPrompt(language, style, retrieved, memoriesUsed)
 	if err != nil {
 		return nil, err
 	}
@@ -400,6 +419,8 @@ func (s *Service) SendMessage(ctx context.Context, userID, conversationID, idemp
 		"prompt_version": prompts.CompanionVersion,
 		"input_tokens":   response.Usage.InputTokens,
 		"output_tokens":  response.Usage.OutputTokens,
+		"journals_used":  len(retrieved),
+		"memories_used":  len(memoriesUsed),
 	})
 	if err != nil {
 		return nil, err
@@ -447,6 +468,13 @@ func (s *Service) SendMessage(ctx context.Context, userID, conversationID, idemp
 	)
 
 	return payload, nil
+}
+
+func (s *Service) retrieveMemories(ctx context.Context, userID, content string) ([]memory.RetrievedMemory, error) {
+	if s.memories == nil {
+		return nil, nil
+	}
+	return s.memories.Retrieve(ctx, userID, content, 5)
 }
 
 func (s *Service) enforceRateLimit(ctx context.Context, userID string) error {

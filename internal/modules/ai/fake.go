@@ -11,17 +11,19 @@ import (
 // FakeLLM is a deterministic local provider. It never calls an external
 // service.
 type FakeLLM struct {
-	Reply string
-	Err   error
-	Delay time.Duration
-	Model string
+	Reply           string
+	StructuredReply string
+	Err             error
+	Delay           time.Duration
+	Model           string
 }
 
 // NewFakeLLM creates a fake provider with a safe default response.
 func NewFakeLLM() *FakeLLM {
 	return &FakeLLM{
-		Reply: "I hear you. What feels most important right now?",
-		Model: "fake-chat",
+		Reply:           "I hear you. What feels most important right now?",
+		StructuredReply: `{"memories":[]}`,
+		Model:           "fake-chat",
 	}
 }
 
@@ -39,12 +41,14 @@ func (f *FakeLLM) Generate(ctx context.Context, request GenerateRequest) (*Gener
 	}
 
 	content := f.Reply
-	if content == "" {
-		if len(request.ResponseSchema) > 0 {
-			content = `{}`
-		} else {
-			content = "I hear you."
+	if len(request.ResponseSchema) > 0 {
+		content = f.StructuredReply
+		if content == "" {
+			content = `{"memories":[]}`
 		}
+	}
+	if content == "" {
+		content = "I hear you."
 	}
 
 	input := approximateTokens(request.System)

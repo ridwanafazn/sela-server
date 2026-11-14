@@ -26,6 +26,7 @@ const (
 // write.
 type JobEnqueuer interface {
 	EnqueueJournalEmbedding(ctx context.Context, tx *gorm.DB, userID, journalID, contentHash string, runAt time.Time) error
+	EnqueueJournalMemoryExtraction(ctx context.Context, tx *gorm.DB, userID, journalID, contentHash string, runAt time.Time) error
 }
 
 // Service implements journal rules, optimistic concurrency, and idempotency.
@@ -126,7 +127,11 @@ func (s *Service) Create(ctx context.Context, userID, idempotencyKey string, inp
 			return err
 		}
 		if journal.Status == StatusActive && s.jobs != nil {
-			if err := s.jobs.EnqueueJournalEmbedding(ctx, tx, userID, journal.ID, contentHash(journal.Content), now); err != nil {
+			hash := contentHash(journal.Content)
+			if err := s.jobs.EnqueueJournalEmbedding(ctx, tx, userID, journal.ID, hash, now); err != nil {
+				return err
+			}
+			if err := s.jobs.EnqueueJournalMemoryExtraction(ctx, tx, userID, journal.ID, hash, now); err != nil {
 				return err
 			}
 		}
@@ -266,7 +271,11 @@ func (s *Service) Update(ctx context.Context, userID, journalID string, ifMatch 
 		}
 		if entry.Status == StatusActive && s.jobs != nil &&
 			(entry.Content != previousContent || previousStatus != StatusActive) {
-			if err := s.jobs.EnqueueJournalEmbedding(ctx, tx, userID, entry.ID, contentHash(entry.Content), entry.UpdatedAt); err != nil {
+			hash := contentHash(entry.Content)
+			if err := s.jobs.EnqueueJournalEmbedding(ctx, tx, userID, entry.ID, hash, entry.UpdatedAt); err != nil {
+				return err
+			}
+			if err := s.jobs.EnqueueJournalMemoryExtraction(ctx, tx, userID, entry.ID, hash, entry.UpdatedAt); err != nil {
 				return err
 			}
 		}
@@ -297,6 +306,10 @@ func (s *Service) Delete(ctx context.Context, userID, journalID string, ifMatch 
 		}
 
 		if err := s.repo.SoftDeleteTx(tx, journalID, userID, entry.Version+1, s.now().UTC()); err != nil {
+			return err
+		}
+		now := s.now().UTC()
+		if err := s.repo.DowngradeMemoriesForDeletedJournalTx(tx, userID, journalID, now); err != nil {
 			return err
 		}
 		return s.repo.DeleteEmbeddingsTx(tx, journalID)

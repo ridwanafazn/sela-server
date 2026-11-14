@@ -35,9 +35,24 @@ func (q *Queue) Transaction(ctx context.Context, fn func(tx *gorm.DB) error) err
 // EnqueueJournalEmbedding adds an idempotent embedding job inside a
 // transaction. Re-enqueuing the same journal content is a no-op.
 func (q *Queue) EnqueueJournalEmbedding(ctx context.Context, tx *gorm.DB, userID, journalID, contentHash string, runAt time.Time) error {
+	return q.enqueueJournalJob(ctx, tx, userID, journalID, contentHash, TypeJournalEmbedding, runAt)
+}
+
+// EnqueueJournalMemoryExtraction adds an idempotent memory extraction job
+// inside a transaction.
+func (q *Queue) EnqueueJournalMemoryExtraction(ctx context.Context, tx *gorm.DB, userID, journalID, contentHash string, runAt time.Time) error {
+	return q.enqueueJournalJob(ctx, tx, userID, journalID, contentHash, TypeJournalMemoryExtraction, runAt)
+}
+
+func (q *Queue) enqueueJournalJob(
+	ctx context.Context,
+	tx *gorm.DB,
+	userID, journalID, contentHash, jobType string,
+	runAt time.Time,
+) error {
 	payload, err := json.Marshal(map[string]string{"journal_id": journalID})
 	if err != nil {
-		return fmt.Errorf("encode embedding job payload: %w", err)
+		return fmt.Errorf("encode journal job payload: %w", err)
 	}
 
 	id, err := ids.New()
@@ -45,7 +60,7 @@ func (q *Queue) EnqueueJournalEmbedding(ctx context.Context, tx *gorm.DB, userID
 		return err
 	}
 
-	key := uuid.NewSHA1(uuid.NameSpaceOID, []byte("journal.embedding:"+journalID+":"+contentHash)).String()
+	key := uuid.NewSHA1(uuid.NameSpaceOID, []byte(jobType+":"+journalID+":"+contentHash)).String()
 	now := time.Now().UTC()
 
 	return tx.Exec(
@@ -53,7 +68,7 @@ func (q *Queue) EnqueueJournalEmbedding(ctx context.Context, tx *gorm.DB, userID
 		 (id, user_id, job_type, payload, status, attempts, max_attempts, run_at, idempotency_key, created_at, updated_at)
 		 VALUES (?, ?, ?, ?::jsonb, 'pending', 0, ?, ?, ?, ?, ?)
 		 ON CONFLICT (user_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING`,
-		id, userID, TypeJournalEmbedding, string(payload), defaultMaxAttempts, runAt, key, now, now,
+		id, userID, jobType, string(payload), defaultMaxAttempts, runAt, key, now, now,
 	).Error
 }
 

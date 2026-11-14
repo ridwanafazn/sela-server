@@ -7,28 +7,59 @@ import (
 
 	"github.com/ridwanafazn/sela-server/internal/modules/ai"
 	"github.com/ridwanafazn/sela-server/internal/modules/journal"
+	"github.com/ridwanafazn/sela-server/internal/modules/memory"
 	"github.com/ridwanafazn/sela-server/prompts"
 )
 
 var companionTemplate = template.Must(template.New("companion").Parse(prompts.CompanionV1))
 
 // BuildSystemPrompt renders the versioned Companion system prompt with
-// retrieved evidence.
-func BuildSystemPrompt(language, style string, retrieved []journal.RetrievedJournal) (string, error) {
+// retrieved memories and journal evidence.
+func BuildSystemPrompt(
+	language, style string,
+	retrieved []journal.RetrievedJournal,
+	memories []memory.RetrievedMemory,
+) (string, error) {
 	var builder strings.Builder
 	err := companionTemplate.Execute(&builder, struct {
 		Language string
 		Style    string
+		Memories string
 		Context  string
 	}{
 		Language: language,
 		Style:    style,
+		Memories: buildMemoryContext(memories),
 		Context:  buildRetrievedContext(retrieved),
 	})
 	if err != nil {
 		return "", fmt.Errorf("render companion prompt: %w", err)
 	}
 	return builder.String(), nil
+}
+
+func buildMemoryContext(memories []memory.RetrievedMemory) string {
+	if len(memories) == 0 {
+		return "No personal memories were retrieved."
+	}
+
+	var builder strings.Builder
+	for _, entry := range memories {
+		category := ""
+		if entry.Category != nil {
+			category = *entry.Category
+		}
+		fmt.Fprintf(
+			&builder,
+			"<memory id=%q status=%q category=%q confidence=%.2f>\n%s\n</memory>\n",
+			entry.ID,
+			entry.Status,
+			category,
+			entry.Confidence,
+			escapePromptText(truncateToRunes(entry.Content, 500)),
+		)
+	}
+	return builder.String()
 }
 
 func buildRetrievedContext(retrieved []journal.RetrievedJournal) string {
@@ -121,4 +152,13 @@ func truncateToRunes(text string, maxRunes int) string {
 		return text
 	}
 	return string(runes[:maxRunes])
+}
+
+func escapePromptText(text string) string {
+	replacer := strings.NewReplacer(
+		"&", "&amp;",
+		"<", "&lt;",
+		">", "&gt;",
+	)
+	return replacer.Replace(text)
 }
