@@ -85,6 +85,7 @@ type RateLimit struct {
 	LoginPerHourAccount int
 	RegisterPerHourIP   int
 	RefreshPerMinuteIP  int
+	CompanionPerMinute  int
 }
 
 // AI holds provider and model settings. Fake providers are the local default
@@ -106,6 +107,21 @@ type AI struct {
 	VertexRegion         string
 	VertexEmbeddingModel string
 	VertexBaseURL        string
+}
+
+// EmbeddingModelName returns the effective embedding model identifier.
+func (a AI) EmbeddingModelName() string {
+	switch a.EmbeddingProvider {
+	case "vertex":
+		return a.VertexEmbeddingModel
+	case "fake":
+		if a.EmbeddingModel == "" {
+			return "fake-embedding-768"
+		}
+		return a.EmbeddingModel
+	default:
+		return a.EmbeddingModel
+	}
 }
 
 // Log holds structured logging settings.
@@ -238,6 +254,7 @@ func load(lookup func(string) (string, bool)) (*Config, error) {
 		LoginPerHourAccount: intValue(lookup, "RATE_LIMIT_LOGIN_PER_HOUR_ACCOUNT", 10, &problems),
 		RegisterPerHourIP:   intValue(lookup, "RATE_LIMIT_REGISTER_PER_HOUR_IP", 3, &problems),
 		RefreshPerMinuteIP:  intValue(lookup, "RATE_LIMIT_REFRESH_PER_MINUTE_IP", 30, &problems),
+		CompanionPerMinute:  intValue(lookup, "RATE_LIMIT_COMPANION_PER_MINUTE", 30, &problems),
 	}
 	if rateLimitCfg.TrustedProxyHops < 0 || rateLimitCfg.TrustedProxyHops > 10 {
 		problems = append(problems, "RATE_LIMIT_TRUSTED_PROXY_HOPS must be between 0 and 10")
@@ -247,6 +264,7 @@ func load(lookup func(string) (string, bool)) (*Config, error) {
 		"RATE_LIMIT_LOGIN_PER_HOUR_ACCOUNT": rateLimitCfg.LoginPerHourAccount,
 		"RATE_LIMIT_REGISTER_PER_HOUR_IP":   rateLimitCfg.RegisterPerHourIP,
 		"RATE_LIMIT_REFRESH_PER_MINUTE_IP":  rateLimitCfg.RefreshPerMinuteIP,
+		"RATE_LIMIT_COMPANION_PER_MINUTE":   rateLimitCfg.CompanionPerMinute,
 	} {
 		if value < 1 {
 			problems = append(problems, key+" must be at least 1")

@@ -147,6 +147,20 @@ func TestEmbeddingPipelineAndHybridRetrieval(t *testing.T) {
 		t.Error("sleep journal was not retrieved by full-text search")
 	}
 
+	naturalResults, err := retrieval.Retrieve(ctx, user.User.ID, "What have I written about sleep?", 8)
+	if err != nil {
+		t.Fatalf("natural language retrieve: %v", err)
+	}
+	foundNatural := false
+	for _, result := range naturalResults {
+		if result.JournalID == sleepJournal.ID {
+			foundNatural = true
+		}
+	}
+	if !foundNatural {
+		t.Error("natural-language query did not retrieve the sleep journal")
+	}
+
 	// A different user must not see these journals.
 	otherUser := newTestUser(t, router)
 	otherResults, err := retrieval.Retrieve(ctx, otherUser.User.ID, sleepJournal.Content, 8)

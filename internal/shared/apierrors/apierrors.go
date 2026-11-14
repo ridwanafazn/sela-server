@@ -116,6 +116,16 @@ func UpstreamUnavailable(message string) *Error {
 	return New(http.StatusServiceUnavailable, CodeUpstreamUnavailable, message)
 }
 
+// BadGateway creates a 502 error for an upstream provider failure.
+func BadGateway(message string) *Error {
+	return New(http.StatusBadGateway, CodeUpstreamUnavailable, message)
+}
+
+// UpstreamTimeout creates a 504 error for a dependency timeout.
+func UpstreamTimeout() *Error {
+	return New(http.StatusGatewayTimeout, CodeUpstreamTimeout, "The upstream service did not respond in time.")
+}
+
 // From converts err into an *Error. Unknown errors become a safe internal
 // error so internal details are never exposed.
 func From(err error) *Error {

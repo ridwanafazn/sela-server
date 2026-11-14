@@ -126,6 +126,17 @@ func testConfig() *config.Config {
 			LoginPerHourAccount: 1000,
 			RegisterPerHourIP:   1000,
 			RefreshPerMinuteIP:  1000,
+			CompanionPerMinute:  1000,
+		},
+		AI: config.AI{
+			Provider:           "fake",
+			Model:              "fake-chat",
+			Timeout:            60 * time.Second,
+			MaxRetries:         3,
+			EmbeddingProvider:  "fake",
+			EmbeddingModel:     "fake-embedding-768",
+			EmbeddingDimension: 768,
+			EmbeddingTimeout:   30 * time.Second,
 		},
 		Log: config.Log{Level: "error", Format: "json"},
 	}

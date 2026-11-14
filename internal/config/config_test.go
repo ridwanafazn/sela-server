@@ -56,6 +56,9 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.RateLimit.RegisterPerHourIP != 3 || cfg.RateLimit.RefreshPerMinuteIP != 30 {
 		t.Errorf("register/refresh limits = (%d, %d), want (3, 30)", cfg.RateLimit.RegisterPerHourIP, cfg.RateLimit.RefreshPerMinuteIP)
 	}
+	if cfg.RateLimit.CompanionPerMinute != 30 {
+		t.Errorf("CompanionPerMinute = %d, want 30", cfg.RateLimit.CompanionPerMinute)
+	}
 	if cfg.AI.Provider != "fake" || cfg.AI.Model != "" {
 		t.Errorf("AI defaults = (%q, %q), want (fake, empty model)", cfg.AI.Provider, cfg.AI.Model)
 	}

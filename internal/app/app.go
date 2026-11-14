@@ -14,7 +14,9 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/ridwanafazn/sela-server/internal/config"
+	"github.com/ridwanafazn/sela-server/internal/modules/ai"
 	"github.com/ridwanafazn/sela-server/internal/modules/auth"
+	"github.com/ridwanafazn/sela-server/internal/modules/conversation"
 	"github.com/ridwanafazn/sela-server/internal/modules/job"
 	"github.com/ridwanafazn/sela-server/internal/modules/journal"
 	"github.com/ridwanafazn/sela-server/internal/modules/user"
@@ -62,11 +64,39 @@ func BuildRouter(cfg *config.Config, log *slog.Logger, db *database.DB) (*gin.En
 	authHandler := auth.NewHandler(authService, cfg.RateLimit.TrustedProxyHops)
 	authMiddleware := auth.Authenticate(authService)
 
+	llm, err := ai.NewLLM(cfg.AI)
+	if err != nil {
+		return nil, err
+	}
+	embeddings, err := ai.NewEmbedding(context.Background(), cfg.AI)
+	if err != nil {
+		return nil, err
+	}
+
 	userService := user.NewService(user.NewRepository(db.Gorm))
 	userHandler := user.NewHandler(userService)
 
-	journalService := journal.NewService(journal.NewRepository(db.Gorm), job.NewQueue(db.Gorm))
+	journalRepo := journal.NewRepository(db.Gorm)
+	journalService := journal.NewService(journalRepo, job.NewQueue(db.Gorm))
 	journalHandler := journal.NewHandler(journalService)
+
+	retrieval := journal.NewRetrievalService(
+		journalRepo,
+		embeddings,
+		cfg.AI.EmbeddingModelName(),
+		cfg.AI.EmbeddingDimension,
+		log,
+	)
+	conversationService := conversation.NewService(
+		conversation.NewRepository(db.Gorm),
+		retrieval,
+		llm,
+		limiter,
+		conversation.Limits{CompanionPerMinute: cfg.RateLimit.CompanionPerMinute},
+		cfg.AI.Model,
+		log,
+	)
+	conversationHandler := conversation.NewHandler(conversationService)
 
 	return httpx.NewRouter(httpx.RouterOptions{
 		Env:              cfg.App.Env,
@@ -91,6 +121,13 @@ func BuildRouter(cfg *config.Config, log *slog.Logger, db *database.DB) (*gin.En
 			protected.GET("/journals/:journalId", journalHandler.Get)
 			protected.PATCH("/journals/:journalId", journalHandler.Update)
 			protected.DELETE("/journals/:journalId", journalHandler.Delete)
+
+			protected.GET("/conversations", conversationHandler.List)
+			protected.POST("/conversations", conversationHandler.Create)
+			protected.GET("/conversations/:conversationId", conversationHandler.Get)
+			protected.DELETE("/conversations/:conversationId", conversationHandler.Delete)
+			protected.GET("/conversations/:conversationId/messages", conversationHandler.ListMessages)
+			protected.POST("/conversations/:conversationId/messages", conversationHandler.SendMessage)
 		},
 	}), nil
 }

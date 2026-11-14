@@ -53,15 +53,7 @@ func run() error {
 		return err
 	}
 
-	embeddingModel := cfg.AI.EmbeddingModel
-	switch cfg.AI.EmbeddingProvider {
-	case "vertex":
-		embeddingModel = cfg.AI.VertexEmbeddingModel
-	case "fake":
-		if embeddingModel == "" {
-			embeddingModel = "fake-embedding-768"
-		}
-	}
+	embeddingModel := cfg.AI.EmbeddingModelName()
 
 	embeddingService := journal.NewEmbeddingService(
 		journal.NewRepository(db.Gorm),
