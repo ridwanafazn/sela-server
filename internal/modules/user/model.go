@@ -1,10 +1,9 @@
 package user
 
 import (
-	"bytes"
-	"encoding/json"
-	"fmt"
 	"time"
+
+	"github.com/ridwanafazn/sela-server/internal/shared/optional"
 )
 
 // Communication styles accepted by the product.
@@ -16,28 +15,7 @@ const (
 )
 
 // OptionalString distinguishes an omitted JSON field from an explicit null.
-type OptionalString struct {
-	Set   bool
-	Value *string
-}
-
-// UnmarshalJSON records presence and supports explicit null.
-func (o *OptionalString) UnmarshalJSON(data []byte) error {
-	o.Set = true
-
-	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
-		o.Value = nil
-		return nil
-	}
-
-	var value string
-	if err := json.Unmarshal(data, &value); err != nil {
-		return fmt.Errorf("decode optional string: %w", err)
-	}
-
-	o.Value = &value
-	return nil
-}
+type OptionalString = optional.String
 
 // Me is the joined current-user and profile view.
 type Me struct {

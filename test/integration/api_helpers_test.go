@@ -86,11 +86,12 @@ type apiResult struct {
 }
 
 type requestOptions struct {
-	body   any
-	token  string
-	ip     string
-	raw    string
-	noJSON bool
+	body    any
+	token   string
+	ip      string
+	raw     string
+	noJSON  bool
+	headers map[string]string
 }
 
 func testConfig() *config.Config {
@@ -162,6 +163,9 @@ func do(t *testing.T, router *gin.Engine, method, path string, opts requestOptio
 	}
 	if opts.token != "" {
 		request.Header.Set("Authorization", "Bearer "+opts.token)
+	}
+	for key, value := range opts.headers {
+		request.Header.Set(key, value)
 	}
 	if opts.ip != "" {
 		request.RemoteAddr = opts.ip + ":12345"

@@ -82,6 +82,17 @@ func Conflict(message string) *Error {
 	return New(http.StatusConflict, CodeConflict, message)
 }
 
+// VersionConflict creates a 409 optimistic-concurrency conflict.
+func VersionConflict(message string) *Error {
+	return New(http.StatusConflict, CodeVersionConflict, message)
+}
+
+// IdempotencyKeyReused creates a 409 conflict for a reused key with a
+// different request body.
+func IdempotencyKeyReused() *Error {
+	return New(http.StatusConflict, CodeIDempotencyKeyReused, "This idempotency key was already used with a different request.")
+}
+
 // RateLimited creates a 429 error with an optional retry hint.
 func RateLimited(retryAfter time.Duration) *Error {
 	err := New(http.StatusTooManyRequests, CodeRateLimited, "Too many attempts. Try again later.")

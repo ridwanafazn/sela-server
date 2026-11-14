@@ -15,6 +15,7 @@ import (
 
 	"github.com/ridwanafazn/sela-server/internal/config"
 	"github.com/ridwanafazn/sela-server/internal/modules/auth"
+	"github.com/ridwanafazn/sela-server/internal/modules/journal"
 	"github.com/ridwanafazn/sela-server/internal/modules/user"
 	"github.com/ridwanafazn/sela-server/internal/platform/database"
 	"github.com/ridwanafazn/sela-server/internal/platform/httpx"
@@ -63,6 +64,9 @@ func BuildRouter(cfg *config.Config, log *slog.Logger, db *database.DB) (*gin.En
 	userService := user.NewService(user.NewRepository(db.Gorm))
 	userHandler := user.NewHandler(userService)
 
+	journalService := journal.NewService(journal.NewRepository(db.Gorm))
+	journalHandler := journal.NewHandler(journalService)
+
 	return httpx.NewRouter(httpx.RouterOptions{
 		Env:              cfg.App.Env,
 		Log:              log,
@@ -80,6 +84,12 @@ func BuildRouter(cfg *config.Config, log *slog.Logger, db *database.DB) (*gin.En
 			protected.POST("/auth/logout", authHandler.Logout)
 			protected.GET("/me", userHandler.GetMe)
 			protected.PATCH("/me", userHandler.UpdateMe)
+
+			protected.GET("/journals", journalHandler.List)
+			protected.POST("/journals", journalHandler.Create)
+			protected.GET("/journals/:journalId", journalHandler.Get)
+			protected.PATCH("/journals/:journalId", journalHandler.Update)
+			protected.DELETE("/journals/:journalId", journalHandler.Delete)
 		},
 	}), nil
 }

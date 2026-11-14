@@ -3,17 +3,16 @@ package auth
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"gorm.io/gorm"
 
 	"github.com/ridwanafazn/sela-server/internal/platform/ratelimit"
 	"github.com/ridwanafazn/sela-server/internal/shared/apierrors"
 	"github.com/ridwanafazn/sela-server/internal/shared/authn"
+	"github.com/ridwanafazn/sela-server/internal/shared/ids"
 	"github.com/ridwanafazn/sela-server/internal/shared/requestid"
 )
 
@@ -114,19 +113,19 @@ func (s *Service) Register(ctx context.Context, clientIP string, input RegisterI
 		return nil, err
 	}
 
-	userID, err := newID()
+	userID, err := ids.New()
 	if err != nil {
 		return nil, err
 	}
-	profileID, err := newID()
+	profileID, err := ids.New()
 	if err != nil {
 		return nil, err
 	}
-	sessionID, err := newID()
+	sessionID, err := ids.New()
 	if err != nil {
 		return nil, err
 	}
-	familyID, err := newID()
+	familyID, err := ids.New()
 	if err != nil {
 		return nil, err
 	}
@@ -210,11 +209,11 @@ func (s *Service) Login(ctx context.Context, clientIP string, input LoginInput) 
 		return nil, errInvalidCredentials
 	}
 
-	sessionID, err := newID()
+	sessionID, err := ids.New()
 	if err != nil {
 		return nil, err
 	}
-	familyID, err := newID()
+	familyID, err := ids.New()
 	if err != nil {
 		return nil, err
 	}
@@ -325,7 +324,7 @@ func (s *Service) Refresh(ctx context.Context, clientIP, rawToken string) (*Auth
 
 		userResult = user
 
-		newSessionID, err := newID()
+		newSessionID, err := ids.New()
 		if err != nil {
 			return err
 		}
@@ -461,12 +460,4 @@ func (s *Service) enforce(ctx context.Context, action, subject string, limit int
 
 func normalizeEmail(email string) string {
 	return strings.ToLower(strings.TrimSpace(email))
-}
-
-func newID() (string, error) {
-	id, err := uuid.NewV7()
-	if err != nil {
-		return "", fmt.Errorf("generate id: %w", err)
-	}
-	return id.String(), nil
 }
