@@ -18,12 +18,17 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
     && CGO_ENABLED=0 GOOS=linux go build \
         -trimpath \
         -ldflags="-s -w" \
-        -o /out/sela-migrate ./cmd/migrate
+        -o /out/sela-migrate ./cmd/migrate \
+    && CGO_ENABLED=0 GOOS=linux go build \
+        -trimpath \
+        -ldflags="-s -w" \
+        -o /out/sela-worker ./cmd/worker
 
 FROM gcr.io/distroless/static-debian12:nonroot
 
 COPY --from=builder /out/sela-api /usr/local/bin/sela-api
 COPY --from=builder /out/sela-migrate /usr/local/bin/sela-migrate
+COPY --from=builder /out/sela-worker /usr/local/bin/sela-worker
 
 USER nonroot:nonroot
 

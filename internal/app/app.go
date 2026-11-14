@@ -15,6 +15,7 @@ import (
 
 	"github.com/ridwanafazn/sela-server/internal/config"
 	"github.com/ridwanafazn/sela-server/internal/modules/auth"
+	"github.com/ridwanafazn/sela-server/internal/modules/job"
 	"github.com/ridwanafazn/sela-server/internal/modules/journal"
 	"github.com/ridwanafazn/sela-server/internal/modules/user"
 	"github.com/ridwanafazn/sela-server/internal/platform/database"
@@ -64,7 +65,7 @@ func BuildRouter(cfg *config.Config, log *slog.Logger, db *database.DB) (*gin.En
 	userService := user.NewService(user.NewRepository(db.Gorm))
 	userHandler := user.NewHandler(userService)
 
-	journalService := journal.NewService(journal.NewRepository(db.Gorm))
+	journalService := journal.NewService(journal.NewRepository(db.Gorm), job.NewQueue(db.Gorm))
 	journalHandler := journal.NewHandler(journalService)
 
 	return httpx.NewRouter(httpx.RouterOptions{

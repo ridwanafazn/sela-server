@@ -6,7 +6,7 @@ IMAGE   ?= sela-server:local
 
 .PHONY: help tidy fmt fmt-check vet test test-race test-integration build run \
 	migrate-up migrate-down migrate-down-all migrate-version \
-	compose-up compose-down compose-reset check docker-build
+	compose-up compose-down compose-reset check docker-build worker worker-once
 
 help:
 	@echo "SELA backend"
@@ -20,6 +20,8 @@ help:
 	@echo "  make test-integration    Run integration tests (requires Postgres)"
 	@echo "  make build               Build API and migration binaries into bin/"
 	@echo "  make run                 Run the API locally"
+	@echo "  make worker              Run the background worker"
+	@echo "  make worker-once         Process available jobs once and exit"
 	@echo "  make migrate-up          Apply all migrations"
 	@echo "  make migrate-down        Roll back one migration"
 	@echo "  make migrate-down-all    Roll back every migration (destructive)"
@@ -58,9 +60,16 @@ build:
 	@mkdir -p bin
 	$(GO) build -trimpath -ldflags "-X main.version=$(VERSION)" -o bin/sela-api ./cmd/api
 	$(GO) build -trimpath -o bin/sela-migrate ./cmd/migrate
+	$(GO) build -trimpath -o bin/sela-worker ./cmd/worker
 
 run:
 	$(GO) run ./cmd/api
+
+worker:
+	$(GO) run ./cmd/worker
+
+worker-once:
+	$(GO) run ./cmd/worker -once
 
 migrate-up:
 	$(GO) run ./cmd/migrate up

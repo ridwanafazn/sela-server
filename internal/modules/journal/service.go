@@ -22,15 +22,23 @@ const (
 	defaultTimezone       = "Asia/Jakarta"
 )
 
+// JobEnqueuer schedules durable work in the same transaction as a journal
+// write.
+type JobEnqueuer interface {
+	EnqueueJournalEmbedding(ctx context.Context, tx *gorm.DB, userID, journalID, contentHash string, runAt time.Time) error
+}
+
 // Service implements journal rules, optimistic concurrency, and idempotency.
 type Service struct {
 	repo *Repository
+	jobs JobEnqueuer
 	now  func() time.Time
 }
 
-// NewService creates the journal service.
-func NewService(repo *Repository) *Service {
-	return &Service{repo: repo, now: time.Now}
+// NewService creates the journal service. jobs may be nil in tests that do
+// not exercise background processing.
+func NewService(repo *Repository, jobs JobEnqueuer) *Service {
+	return &Service{repo: repo, jobs: jobs, now: time.Now}
 }
 
 // Create creates a journal or returns the stored response for a retried key.
@@ -116,6 +124,11 @@ func (s *Service) Create(ctx context.Context, userID, idempotencyKey string, inp
 
 		if err := s.repo.Create(tx, journal); err != nil {
 			return err
+		}
+		if journal.Status == StatusActive && s.jobs != nil {
+			if err := s.jobs.EnqueueJournalEmbedding(ctx, tx, userID, journal.ID, contentHash(journal.Content), now); err != nil {
+				return err
+			}
 		}
 
 		created := newView(journal)
@@ -228,6 +241,9 @@ func (s *Service) Update(ctx context.Context, userID, journalID string, ifMatch 
 			return nil
 		}
 
+		previousContent := entry.Content
+		previousStatus := entry.Status
+
 		if input.Title.Set {
 			entry.Title = input.Title.Value
 		}
@@ -247,6 +263,12 @@ func (s *Service) Update(ctx context.Context, userID, journalID string, ifMatch 
 
 		if err := s.repo.SaveTx(tx, entry); err != nil {
 			return err
+		}
+		if entry.Status == StatusActive && s.jobs != nil &&
+			(entry.Content != previousContent || previousStatus != StatusActive) {
+			if err := s.jobs.EnqueueJournalEmbedding(ctx, tx, userID, entry.ID, contentHash(entry.Content), entry.UpdatedAt); err != nil {
+				return err
+			}
 		}
 
 		updated := newView(entry)
@@ -274,7 +296,10 @@ func (s *Service) Delete(ctx context.Context, userID, journalID string, ifMatch 
 			return apierrors.VersionConflict("The journal was modified by another request.")
 		}
 
-		return s.repo.SoftDeleteTx(tx, journalID, userID, entry.Version+1, s.now().UTC())
+		if err := s.repo.SoftDeleteTx(tx, journalID, userID, entry.Version+1, s.now().UTC()); err != nil {
+			return err
+		}
+		return s.repo.DeleteEmbeddingsTx(tx, journalID)
 	})
 }
 
@@ -398,6 +423,11 @@ func validateUpdate(input UpdateInput) error {
 
 func validStatus(status string) bool {
 	return status == StatusDraft || status == StatusActive
+}
+
+func contentHash(content string) string {
+	sum := sha256.Sum256([]byte(content))
+	return hex.EncodeToString(sum[:])
 }
 
 func createRequestHash(input CreateInput) string {
