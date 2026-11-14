@@ -94,7 +94,7 @@ jobs:
         run: npx --yes @redocly/cli@2.78.0 lint docs/shared/openapi.yaml
 
   security:
-    name: Vulnerability scan (report-only)
+    name: Vulnerability scan
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -108,15 +108,9 @@ jobs:
           cache: true
 
       - name: Install govulncheck
-        # govulncheck v1.9.0 and newer require Go 1.26. Pin the last release
-        # that runs on the Go 1.25 toolchain.
-        run: go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
+        run: go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
 
       - name: Run govulncheck
-        # Report-only while the project is pinned to Go 1.25. Several
-        # standard-library and golang.org/x/net fixes ship only in Go 1.26,
-        # so this step must not block merges until the toolchain is upgraded.
-        continue-on-error: true
         run: govulncheck ./...
 
   container:
