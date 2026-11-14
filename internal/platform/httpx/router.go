@@ -19,6 +19,8 @@ type RouterOptions struct {
 	Log              *slog.Logger
 	Readiness        health.Readiness
 	ReadinessTimeout time.Duration
+	MaxBodyBytes     int64
+	Register         func(api *gin.RouterGroup)
 }
 
 // NewRouter builds the Gin engine with operational middleware and routes.
@@ -38,7 +40,7 @@ func NewRouter(opts RouterOptions) *gin.Engine {
 	}
 
 	router := gin.New()
-	router.Use(RequestID(), AccessLog(log), Recovery(log))
+	router.Use(RequestID(), AccessLog(log), ErrorLog(log), Recovery(log))
 
 	router.NoRoute(func(c *gin.Context) {
 		response.Error(c, apierrors.NotFound("The requested resource was not found."))
@@ -47,8 +49,13 @@ func NewRouter(opts RouterOptions) *gin.Engine {
 	healthHandler := health.NewHandler(opts.Readiness, opts.ReadinessTimeout, log)
 
 	api := router.Group("/api/v1")
+	api.Use(BodyLimit(opts.MaxBodyBytes))
 	api.GET("/health/live", healthHandler.Live)
 	api.GET("/health/ready", healthHandler.Ready)
+
+	if opts.Register != nil {
+		opts.Register(api)
+	}
 
 	return router
 }

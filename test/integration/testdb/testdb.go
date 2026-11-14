@@ -17,6 +17,7 @@ import (
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 
+	"github.com/ridwanafazn/sela-server/internal/config"
 	"github.com/ridwanafazn/sela-server/internal/platform/database"
 )
 
@@ -25,9 +26,9 @@ const defaultURL = "postgres://sela:sela@localhost:5432/sela_test?sslmode=disabl
 var databaseCounter atomic.Uint64
 
 // New creates a uniquely named database, applies every migration, and returns
-// a pool connected to it plus its DSN. The database is dropped when the test
-// finishes.
-func New(t *testing.T) (*sql.DB, string) {
+// a GORM pool connected to it plus its DSN. The database is dropped when the
+// test finishes.
+func New(t *testing.T) (*database.DB, string) {
 	t.Helper()
 
 	base := strings.TrimSpace(os.Getenv("TEST_DATABASE_URL"))
@@ -62,13 +63,19 @@ func New(t *testing.T) (*sql.DB, string) {
 		t.Fatalf("create test database %s: %v", name, err)
 	}
 
-	db, err := sql.Open("pgx", withDatabase(t, base, name))
-	if err != nil {
-		t.Fatalf("open test database: %v", err)
-	}
-	db.SetMaxOpenConns(4)
-	db.SetMaxIdleConns(2)
 	dsn := withDatabase(t, base, name)
+
+	db, err := database.Open(ctx, config.Database{
+		URL:             dsn,
+		MaxOpenConns:    4,
+		MaxIdleConns:    2,
+		ConnMaxLifetime: time.Minute,
+		ConnMaxIdleTime: time.Minute,
+		PingTimeout:     5 * time.Second,
+	})
+	if err != nil {
+		t.Fatalf("open test database %s: %v", name, err)
+	}
 
 	t.Cleanup(func() {
 		_ = db.Close()
@@ -78,10 +85,6 @@ func New(t *testing.T) (*sql.DB, string) {
 			t.Logf("drop test database %s: %v", name, err)
 		}
 	})
-
-	if err := db.PingContext(ctx); err != nil {
-		t.Fatalf("connect to test database %s: %v", name, err)
-	}
 
 	if err := database.MigrateUp(dsn); err != nil {
 		t.Fatalf("apply migrations to test database %s: %v", name, err)

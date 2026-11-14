@@ -5,6 +5,7 @@ package apierrors
 import (
 	"errors"
 	"net/http"
+	"time"
 )
 
 // Canonical error codes from the API contract. Clients branch on these
@@ -38,10 +39,11 @@ type Detail struct {
 // Error is a safe, client-facing API error. It intentionally carries no
 // internal cause; wrap internal failures separately when logging.
 type Error struct {
-	Status  int
-	Code    string
-	Message string
-	Details []Detail
+	Status     int
+	Code       string
+	Message    string
+	Details    []Detail
+	RetryAfter time.Duration
 }
 
 // Error implements the error interface.
@@ -78,6 +80,18 @@ func NotFound(message string) *Error {
 // Conflict creates a 409 state conflict.
 func Conflict(message string) *Error {
 	return New(http.StatusConflict, CodeConflict, message)
+}
+
+// RateLimited creates a 429 error with an optional retry hint.
+func RateLimited(retryAfter time.Duration) *Error {
+	err := New(http.StatusTooManyRequests, CodeRateLimited, "Too many attempts. Try again later.")
+	err.RetryAfter = retryAfter
+	return err
+}
+
+// PreconditionRequired creates a 428 error for a missing precondition header.
+func PreconditionRequired(message string) *Error {
+	return New(http.StatusPreconditionRequired, CodePreconditionRequired, message)
 }
 
 // Internal creates a safe 500 error. The underlying cause must be logged

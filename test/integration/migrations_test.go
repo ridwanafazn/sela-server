@@ -4,7 +4,6 @@ package integration_test
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"testing"
 	"time"
@@ -17,10 +16,10 @@ import (
 	"github.com/ridwanafazn/sela-server/test/integration/testdb"
 )
 
-func exec(t *testing.T, db *sql.DB, query string, args ...any) {
+func exec(t *testing.T, db *database.DB, query string, args ...any) {
 	t.Helper()
 
-	if _, err := db.ExecContext(context.Background(), query, args...); err != nil {
+	if _, err := db.SQL.ExecContext(context.Background(), query, args...); err != nil {
 		t.Fatalf("exec %q: %v", query, err)
 	}
 }
@@ -44,7 +43,7 @@ func requirePgError(t *testing.T, err error, code, constraint string) {
 	}
 }
 
-func insertUser(t *testing.T, db *sql.DB, email string) string {
+func insertUser(t *testing.T, db *database.DB, email string) string {
 	t.Helper()
 
 	id := uuid.NewString()
@@ -64,7 +63,7 @@ func TestMigrationsAreReversible(t *testing.T) {
 		t.Fatalf("LatestVersion: %v", err)
 	}
 
-	version, dirty, err := database.MigrationVersion(ctx, db)
+	version, dirty, err := database.MigrationVersion(ctx, db.SQL)
 	if err != nil {
 		t.Fatalf("MigrationVersion: %v", err)
 	}
@@ -76,7 +75,7 @@ func TestMigrationsAreReversible(t *testing.T) {
 		t.Fatalf("MigrateDown: %v", err)
 	}
 
-	version, dirty, err = database.MigrationVersion(ctx, db)
+	version, dirty, err = database.MigrationVersion(ctx, db.SQL)
 	if err != nil {
 		t.Fatalf("MigrationVersion after down: %v", err)
 	}
@@ -88,7 +87,7 @@ func TestMigrationsAreReversible(t *testing.T) {
 		t.Fatalf("MigrateUp after down: %v", err)
 	}
 
-	version, dirty, err = database.MigrationVersion(ctx, db)
+	version, dirty, err = database.MigrationVersion(ctx, db.SQL)
 	if err != nil {
 		t.Fatalf("MigrationVersion after up: %v", err)
 	}
@@ -101,7 +100,7 @@ func TestUsersEmailIsCaseInsensitiveUnique(t *testing.T) {
 	db, _ := testdb.New(t)
 
 	insertUser(t, db, "Person@Example.com")
-	_, err := db.ExecContext(context.Background(),
+	_, err := db.SQL.ExecContext(context.Background(),
 		`INSERT INTO users (id, email, password_hash) VALUES ($1, $2, $3)`,
 		uuid.NewString(), "person@example.com", "argon2id-placeholder",
 	)
@@ -112,7 +111,7 @@ func TestUsersEmailIsCaseInsensitiveUnique(t *testing.T) {
 func TestUsersStatusConstraint(t *testing.T) {
 	db, _ := testdb.New(t)
 
-	_, err := db.ExecContext(context.Background(),
+	_, err := db.SQL.ExecContext(context.Background(),
 		`INSERT INTO users (id, email, password_hash, status) VALUES ($1, $2, $3, $4)`,
 		uuid.NewString(), "status@example.com", "argon2id-placeholder", "banned",
 	)
@@ -124,7 +123,7 @@ func TestProfilesCommunicationStyleConstraint(t *testing.T) {
 	db, _ := testdb.New(t)
 	userID := insertUser(t, db, "profile@example.com")
 
-	_, err := db.ExecContext(context.Background(),
+	_, err := db.SQL.ExecContext(context.Background(),
 		`INSERT INTO profiles (id, user_id, communication_style) VALUES ($1, $2, $3)`,
 		uuid.NewString(), userID, "harsh",
 	)
@@ -136,7 +135,7 @@ func TestJournalsVersionConstraint(t *testing.T) {
 	db, _ := testdb.New(t)
 	userID := insertUser(t, db, "journal-version@example.com")
 
-	_, err := db.ExecContext(context.Background(),
+	_, err := db.SQL.ExecContext(context.Background(),
 		`INSERT INTO journals (id, user_id, content, entry_date, version) VALUES ($1, $2, $3, CURRENT_DATE, $4)`,
 		uuid.NewString(), userID, "content", 0,
 	)
@@ -156,7 +155,7 @@ func TestJournalsFullTextSearchAndIndexes(t *testing.T) {
 	)
 
 	var matches bool
-	if err := db.QueryRowContext(ctx,
+	if err := db.SQL.QueryRowContext(ctx,
 		`SELECT search_vector @@ websearch_to_tsquery('simple', $1) FROM journals WHERE id = $2`,
 		"sleep", journalID,
 	).Scan(&matches); err != nil {
@@ -172,7 +171,7 @@ func TestJournalsFullTextSearchAndIndexes(t *testing.T) {
 		`INSERT INTO journals (id, user_id, content, entry_date, status) VALUES ($1, $2, $3, CURRENT_DATE, $4)`,
 		draftID, userID, "sleep notes in a draft", "draft",
 	)
-	if err := db.QueryRowContext(ctx,
+	if err := db.SQL.QueryRowContext(ctx,
 		`SELECT search_vector @@ websearch_to_tsquery('simple', $1) FROM journals WHERE id = $2`,
 		"sleep", draftID,
 	).Scan(&draftMatches); err != nil {
@@ -188,33 +187,31 @@ func TestJournalsFullTextSearchAndIndexes(t *testing.T) {
 		"journals_user_id_updated_at_id_idx",
 		"journals_search_vector_idx",
 	}
-	rows, err := db.QueryContext(ctx,
-		`SELECT indexname FROM pg_indexes WHERE schemaname = 'public' AND tablename = 'journals'`,
+	assertIndexesExist(t, db, "journals", wantIndexes)
+}
+
+func TestAuthRateLimitTable(t *testing.T) {
+	db, _ := testdb.New(t)
+
+	exec(t, db,
+		`INSERT INTO auth_rate_limits (id, action, subject_hash) VALUES ($1, $2, $3)`,
+		uuid.NewString(), "auth.login.ip", "hash",
 	)
-	if err != nil {
-		t.Fatalf("query indexes: %v", err)
-	}
-	defer func() {
-		_ = rows.Close()
-	}()
 
-	found := make(map[string]bool)
-	for rows.Next() {
-		var name string
-		if err := rows.Scan(&name); err != nil {
-			t.Fatalf("scan index: %v", err)
-		}
-		found[name] = true
+	var count int
+	if err := db.SQL.QueryRowContext(context.Background(),
+		`SELECT count(*) FROM auth_rate_limits WHERE action = $1`, "auth.login.ip",
+	).Scan(&count); err != nil {
+		t.Fatalf("count rate limit rows: %v", err)
 	}
-	if err := rows.Err(); err != nil {
-		t.Fatalf("iterate indexes: %v", err)
+	if count != 1 {
+		t.Errorf("rate limit rows = %d, want 1", count)
 	}
 
-	for _, name := range wantIndexes {
-		if !found[name] {
-			t.Errorf("missing index %s", name)
-		}
-	}
+	assertIndexesExist(t, db, "auth_rate_limits", []string{
+		"auth_rate_limits_lookup_idx",
+		"auth_rate_limits_created_at_idx",
+	})
 }
 
 func TestIdempotencyKeysAreUniquePerEndpoint(t *testing.T) {
@@ -227,7 +224,7 @@ func TestIdempotencyKeysAreUniquePerEndpoint(t *testing.T) {
 
 	exec(t, db, insert, uuid.NewString(), userID, "key-1", "POST /journals", "hash-a", expiresAt)
 
-	_, err := db.ExecContext(context.Background(), insert,
+	_, err := db.SQL.ExecContext(context.Background(), insert,
 		uuid.NewString(), userID, "key-1", "POST /journals", "hash-b", expiresAt,
 	)
 	requirePgError(t, err, "23505", "idempotency_keys_user_endpoint_key_key")
@@ -244,7 +241,7 @@ func TestAuthSessionsRefreshHashIsUnique(t *testing.T) {
 
 	exec(t, db, insert, uuid.NewString(), userID, uuid.NewString(), "same-hash")
 
-	_, err := db.ExecContext(context.Background(), insert,
+	_, err := db.SQL.ExecContext(context.Background(), insert,
 		uuid.NewString(), userID, uuid.NewString(), "same-hash",
 	)
 	requirePgError(t, err, "23505", "auth_sessions_refresh_token_hash_key")
@@ -277,7 +274,7 @@ func TestUserDeletionCascades(t *testing.T) {
 	for _, table := range []string{"profiles", "auth_sessions", "journals", "idempotency_keys"} {
 		var count int
 		query := "SELECT count(*) FROM " + table + " WHERE user_id = $1"
-		if err := db.QueryRowContext(ctx, query, userID).Scan(&count); err != nil {
+		if err := db.SQL.QueryRowContext(ctx, query, userID).Scan(&count); err != nil {
 			t.Fatalf("count %s: %v", table, err)
 		}
 		if count != 0 {
@@ -295,5 +292,37 @@ func TestDraftAndActiveStatusesAreAllowed(t *testing.T) {
 			`INSERT INTO journals (id, user_id, content, entry_date, status) VALUES ($1, $2, $3, CURRENT_DATE, $4)`,
 			uuid.NewString(), userID, "content", status,
 		)
+	}
+}
+
+func assertIndexesExist(t *testing.T, db *database.DB, table string, want []string) {
+	t.Helper()
+
+	rows, err := db.SQL.QueryContext(context.Background(),
+		`SELECT indexname FROM pg_indexes WHERE schemaname = 'public' AND tablename = $1`, table,
+	)
+	if err != nil {
+		t.Fatalf("query indexes for %s: %v", table, err)
+	}
+	defer func() {
+		_ = rows.Close()
+	}()
+
+	found := make(map[string]bool)
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			t.Fatalf("scan index: %v", err)
+		}
+		found[name] = true
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate indexes: %v", err)
+	}
+
+	for _, name := range want {
+		if !found[name] {
+			t.Errorf("missing index %s on %s", name, table)
+		}
 	}
 }

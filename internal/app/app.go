@@ -11,9 +11,14 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/gin-gonic/gin"
+
 	"github.com/ridwanafazn/sela-server/internal/config"
+	"github.com/ridwanafazn/sela-server/internal/modules/auth"
+	"github.com/ridwanafazn/sela-server/internal/modules/user"
 	"github.com/ridwanafazn/sela-server/internal/platform/database"
 	"github.com/ridwanafazn/sela-server/internal/platform/httpx"
+	"github.com/ridwanafazn/sela-server/internal/platform/ratelimit"
 	"github.com/ridwanafazn/sela-server/migrations"
 )
 
@@ -23,6 +28,60 @@ type App struct {
 	log    *slog.Logger
 	db     *database.DB
 	server *http.Server
+}
+
+// BuildRouter wires the HTTP routes and their dependencies.
+func BuildRouter(cfg *config.Config, log *slog.Logger, db *database.DB) (*gin.Engine, error) {
+	expectedVersion, err := migrations.LatestVersion()
+	if err != nil {
+		return nil, fmt.Errorf("read embedded migration version: %w", err)
+	}
+
+	readiness := database.NewReadiness(db, expectedVersion, cfg.Health.Timeout)
+
+	authRepo := auth.NewRepository(db.Gorm)
+	tokens := auth.NewTokenManager(cfg.JWT.AccessSecret, cfg.JWT.Issuer, cfg.JWT.Audience, cfg.JWT.AccessTTL)
+	passwords := auth.NewPasswordHasher()
+	limiter := ratelimit.New(db.Gorm, cfg.RateLimit.Secret)
+	authService := auth.NewService(
+		authRepo,
+		tokens,
+		passwords,
+		limiter,
+		auth.Limits{
+			LoginPerMinuteIP:    cfg.RateLimit.LoginPerMinuteIP,
+			LoginPerHourAccount: cfg.RateLimit.LoginPerHourAccount,
+			RegisterPerHourIP:   cfg.RateLimit.RegisterPerHourIP,
+			RefreshPerMinuteIP:  cfg.RateLimit.RefreshPerMinuteIP,
+		},
+		cfg.JWT.RefreshTTL,
+		log,
+	)
+	authHandler := auth.NewHandler(authService, cfg.RateLimit.TrustedProxyHops)
+	authMiddleware := auth.Authenticate(authService)
+
+	userService := user.NewService(user.NewRepository(db.Gorm))
+	userHandler := user.NewHandler(userService)
+
+	return httpx.NewRouter(httpx.RouterOptions{
+		Env:              cfg.App.Env,
+		Log:              log,
+		Readiness:        readiness,
+		ReadinessTimeout: cfg.Health.Timeout,
+		MaxBodyBytes:     cfg.HTTP.MaxBodyBytes,
+		Register: func(api *gin.RouterGroup) {
+			authGroup := api.Group("/auth")
+			authGroup.POST("/register", authHandler.Register)
+			authGroup.POST("/login", authHandler.Login)
+			authGroup.POST("/refresh", authHandler.Refresh)
+
+			protected := api.Group("")
+			protected.Use(authMiddleware)
+			protected.POST("/auth/logout", authHandler.Logout)
+			protected.GET("/me", userHandler.GetMe)
+			protected.PATCH("/me", userHandler.UpdateMe)
+		},
+	}), nil
 }
 
 // New wires dependencies and prepares the HTTP server. Connectivity and
@@ -63,14 +122,11 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 		)
 	}
 
-	readiness := database.NewReadiness(db, expectedVersion, cfg.Health.Timeout)
-
-	router := httpx.NewRouter(httpx.RouterOptions{
-		Env:              cfg.App.Env,
-		Log:              log,
-		Readiness:        readiness,
-		ReadinessTimeout: cfg.Health.Timeout,
-	})
+	router, err := BuildRouter(cfg, log, db)
+	if err != nil {
+		_ = db.Close()
+		return nil, err
+	}
 
 	server := &http.Server{
 		Addr:              ":" + strconv.Itoa(cfg.App.Port),

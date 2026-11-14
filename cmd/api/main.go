@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	_ "time/tzdata"
 
 	"github.com/ridwanafazn/sela-server/internal/app"
 	"github.com/ridwanafazn/sela-server/internal/config"

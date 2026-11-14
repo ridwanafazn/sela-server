@@ -23,11 +23,13 @@ const (
 
 // Config is the complete runtime configuration.
 type Config struct {
-	App      App
-	HTTP     HTTP
-	Database Database
-	Health   Health
-	Log      Log
+	App       App
+	HTTP      HTTP
+	Database  Database
+	Health    Health
+	JWT       JWT
+	RateLimit RateLimit
+	Log       Log
 }
 
 // App holds process-level settings.
@@ -37,12 +39,13 @@ type App struct {
 	Port int
 }
 
-// HTTP holds server timeouts and shutdown behavior.
+// HTTP holds server timeouts and request limits.
 type HTTP struct {
 	ReadTimeout     time.Duration
 	WriteTimeout    time.Duration
 	IdleTimeout     time.Duration
 	ShutdownTimeout time.Duration
+	MaxBodyBytes    int64
 }
 
 // Database holds connection pool settings. URL is the pooled connection used
@@ -61,6 +64,26 @@ type Database struct {
 // Health holds the overall readiness check budget.
 type Health struct {
 	Timeout time.Duration
+}
+
+// JWT holds access-token settings. Refresh tokens are opaque and are not
+// signed.
+type JWT struct {
+	AccessSecret string
+	AccessTTL    time.Duration
+	RefreshTTL   time.Duration
+	Issuer       string
+	Audience     string
+}
+
+// RateLimit holds the DB-backed authentication limits.
+type RateLimit struct {
+	Secret              string
+	TrustedProxyHops    int
+	LoginPerMinuteIP    int
+	LoginPerHourAccount int
+	RegisterPerHourIP   int
+	RefreshPerMinuteIP  int
 }
 
 // Log holds structured logging settings.
@@ -125,6 +148,10 @@ func load(lookup func(string) (string, bool)) (*Config, error) {
 		WriteTimeout:    durationValue(lookup, "HTTP_WRITE_TIMEOUT", 30*time.Second, &problems),
 		IdleTimeout:     durationValue(lookup, "HTTP_IDLE_TIMEOUT", 60*time.Second, &problems),
 		ShutdownTimeout: durationValue(lookup, "HTTP_SHUTDOWN_TIMEOUT", 15*time.Second, &problems),
+		MaxBodyBytes:    int64Value(lookup, "HTTP_MAX_BODY_BYTES", 1<<20, &problems),
+	}
+	if httpCfg.MaxBodyBytes < 1 {
+		problems = append(problems, "HTTP_MAX_BODY_BYTES must be at least 1")
 	}
 
 	dbCfg := Database{
@@ -151,6 +178,59 @@ func load(lookup func(string) (string, bool)) (*Config, error) {
 		Timeout: durationValue(lookup, "HEALTH_CHECK_TIMEOUT", 5*time.Second, &problems),
 	}
 
+	accessSecret := strings.TrimSpace(stringValue(lookup, "JWT_ACCESS_SECRET", ""))
+	if accessSecret == "" {
+		problems = append(problems, "JWT_ACCESS_SECRET is required")
+	} else if len(accessSecret) < 32 {
+		problems = append(problems, "JWT_ACCESS_SECRET must be at least 32 characters")
+	}
+
+	jwtCfg := JWT{
+		AccessSecret: accessSecret,
+		AccessTTL:    durationValue(lookup, "JWT_ACCESS_TTL", 15*time.Minute, &problems),
+		RefreshTTL:   durationValue(lookup, "JWT_REFRESH_TTL", 720*time.Hour, &problems),
+		Issuer:       stringValue(lookup, "JWT_ISSUER", "sela-api"),
+		Audience:     stringValue(lookup, "JWT_AUDIENCE", "sela-mobile"),
+	}
+	if jwtCfg.Issuer == "" {
+		problems = append(problems, "JWT_ISSUER must not be empty")
+	}
+	if jwtCfg.Audience == "" {
+		problems = append(problems, "JWT_AUDIENCE must not be empty")
+	}
+	if jwtCfg.RefreshTTL <= jwtCfg.AccessTTL {
+		problems = append(problems, "JWT_REFRESH_TTL must be greater than JWT_ACCESS_TTL")
+	}
+
+	rateLimitSecret := strings.TrimSpace(stringValue(lookup, "RATE_LIMIT_SECRET", ""))
+	if rateLimitSecret == "" {
+		rateLimitSecret = accessSecret
+	} else if len(rateLimitSecret) < 32 {
+		problems = append(problems, "RATE_LIMIT_SECRET must be at least 32 characters")
+	}
+
+	rateLimitCfg := RateLimit{
+		Secret:              rateLimitSecret,
+		TrustedProxyHops:    intValue(lookup, "RATE_LIMIT_TRUSTED_PROXY_HOPS", 0, &problems),
+		LoginPerMinuteIP:    intValue(lookup, "RATE_LIMIT_LOGIN_PER_MINUTE_IP", 5, &problems),
+		LoginPerHourAccount: intValue(lookup, "RATE_LIMIT_LOGIN_PER_HOUR_ACCOUNT", 10, &problems),
+		RegisterPerHourIP:   intValue(lookup, "RATE_LIMIT_REGISTER_PER_HOUR_IP", 3, &problems),
+		RefreshPerMinuteIP:  intValue(lookup, "RATE_LIMIT_REFRESH_PER_MINUTE_IP", 30, &problems),
+	}
+	if rateLimitCfg.TrustedProxyHops < 0 || rateLimitCfg.TrustedProxyHops > 10 {
+		problems = append(problems, "RATE_LIMIT_TRUSTED_PROXY_HOPS must be between 0 and 10")
+	}
+	for key, value := range map[string]int{
+		"RATE_LIMIT_LOGIN_PER_MINUTE_IP":    rateLimitCfg.LoginPerMinuteIP,
+		"RATE_LIMIT_LOGIN_PER_HOUR_ACCOUNT": rateLimitCfg.LoginPerHourAccount,
+		"RATE_LIMIT_REGISTER_PER_HOUR_IP":   rateLimitCfg.RegisterPerHourIP,
+		"RATE_LIMIT_REFRESH_PER_MINUTE_IP":  rateLimitCfg.RefreshPerMinuteIP,
+	} {
+		if value < 1 {
+			problems = append(problems, key+" must be at least 1")
+		}
+	}
+
 	if len(problems) > 0 {
 		return nil, fmt.Errorf("invalid configuration: %s", strings.Join(problems, "; "))
 	}
@@ -164,6 +244,15 @@ func load(lookup func(string) (string, bool)) (*Config, error) {
 		HTTP:     httpCfg,
 		Database: dbCfg,
 		Health:   healthCfg,
+		JWT:      jwtCfg,
+		RateLimit: RateLimit{
+			Secret:              rateLimitSecret,
+			TrustedProxyHops:    rateLimitCfg.TrustedProxyHops,
+			LoginPerMinuteIP:    rateLimitCfg.LoginPerMinuteIP,
+			LoginPerHourAccount: rateLimitCfg.LoginPerHourAccount,
+			RegisterPerHourIP:   rateLimitCfg.RegisterPerHourIP,
+			RefreshPerMinuteIP:  rateLimitCfg.RefreshPerMinuteIP,
+		},
 		Log: Log{
 			Level:  logLevel,
 			Format: logFormat,
@@ -185,6 +274,21 @@ func intValue(lookup func(string) (string, bool), key string, fallback int, prob
 	}
 
 	value, err := strconv.Atoi(strings.TrimSpace(raw))
+	if err != nil {
+		*problems = append(*problems, fmt.Sprintf("%s must be an integer", key))
+		return fallback
+	}
+
+	return value
+}
+
+func int64Value(lookup func(string) (string, bool), key string, fallback int64, problems *[]string) int64 {
+	raw, ok := lookup(key)
+	if !ok || strings.TrimSpace(raw) == "" {
+		return fallback
+	}
+
+	value, err := strconv.ParseInt(strings.TrimSpace(raw), 10, 64)
 	if err != nil {
 		*problems = append(*problems, fmt.Sprintf("%s must be an integer", key))
 		return fallback

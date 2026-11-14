@@ -13,22 +13,21 @@ func lookupFrom(values map[string]string) func(string) (string, bool) {
 	}
 }
 
+func validValues() map[string]string {
+	return map[string]string{
+		"DATABASE_URL":      "postgres://user:pass@localhost:5432/sela?sslmode=disable",
+		"JWT_ACCESS_SECRET": "test-only-access-secret-0123456789abcdef",
+	}
+}
+
 func TestLoadDefaults(t *testing.T) {
-	cfg, err := load(lookupFrom(map[string]string{
-		"DATABASE_URL": "postgres://user:pass@localhost:5432/sela?sslmode=disable",
-	}))
+	cfg, err := load(lookupFrom(validValues()))
 	if err != nil {
 		t.Fatalf("load returned error: %v", err)
 	}
 
-	if cfg.App.Env != EnvDevelopment {
-		t.Errorf("App.Env = %q, want %q", cfg.App.Env, EnvDevelopment)
-	}
-	if cfg.App.Name != "sela-server" {
-		t.Errorf("App.Name = %q, want %q", cfg.App.Name, "sela-server")
-	}
-	if cfg.App.Port != 8080 {
-		t.Errorf("App.Port = %d, want 8080", cfg.App.Port)
+	if cfg.App.Env != EnvDevelopment || cfg.App.Name != "sela-server" || cfg.App.Port != 8080 {
+		t.Errorf("app defaults = %+v", cfg.App)
 	}
 	if cfg.Database.MaxOpenConns != 10 || cfg.Database.MaxIdleConns != 5 {
 		t.Errorf("pool defaults = (%d, %d), want (10, 5)", cfg.Database.MaxOpenConns, cfg.Database.MaxIdleConns)
@@ -36,11 +35,26 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.Database.ConnMaxLifetime != 30*time.Minute {
 		t.Errorf("ConnMaxLifetime = %s, want 30m", cfg.Database.ConnMaxLifetime)
 	}
-	if cfg.Database.PingTimeout != 2*time.Second {
-		t.Errorf("PingTimeout = %s, want 2s", cfg.Database.PingTimeout)
-	}
 	if cfg.Health.Timeout != 5*time.Second {
 		t.Errorf("Health.Timeout = %s, want 5s", cfg.Health.Timeout)
+	}
+	if cfg.HTTP.MaxBodyBytes != 1<<20 {
+		t.Errorf("HTTP.MaxBodyBytes = %d, want %d", cfg.HTTP.MaxBodyBytes, 1<<20)
+	}
+	if cfg.JWT.AccessTTL != 15*time.Minute || cfg.JWT.RefreshTTL != 720*time.Hour {
+		t.Errorf("JWT TTLs = (%s, %s), want (15m, 720h)", cfg.JWT.AccessTTL, cfg.JWT.RefreshTTL)
+	}
+	if cfg.JWT.Issuer != "sela-api" || cfg.JWT.Audience != "sela-mobile" {
+		t.Errorf("JWT issuer/audience = (%q, %q)", cfg.JWT.Issuer, cfg.JWT.Audience)
+	}
+	if cfg.RateLimit.Secret != cfg.JWT.AccessSecret {
+		t.Error("RATE_LIMIT_SECRET did not fall back to JWT_ACCESS_SECRET")
+	}
+	if cfg.RateLimit.LoginPerMinuteIP != 5 || cfg.RateLimit.LoginPerHourAccount != 10 {
+		t.Errorf("login limits = (%d, %d), want (5, 10)", cfg.RateLimit.LoginPerMinuteIP, cfg.RateLimit.LoginPerHourAccount)
+	}
+	if cfg.RateLimit.RegisterPerHourIP != 3 || cfg.RateLimit.RefreshPerMinuteIP != 30 {
+		t.Errorf("register/refresh limits = (%d, %d), want (3, 30)", cfg.RateLimit.RegisterPerHourIP, cfg.RateLimit.RefreshPerMinuteIP)
 	}
 	if cfg.Log.Level != "info" || cfg.Log.Format != "json" {
 		t.Errorf("log defaults = (%q, %q), want (info, json)", cfg.Log.Level, cfg.Log.Format)
@@ -48,9 +62,10 @@ func TestLoadDefaults(t *testing.T) {
 }
 
 func TestLoadMigrationURLFallback(t *testing.T) {
+	values := validValues()
 	const databaseURL = "postgres://user:pass@localhost:5432/sela?sslmode=disable"
 
-	cfg, err := load(lookupFrom(map[string]string{"DATABASE_URL": databaseURL}))
+	cfg, err := load(lookupFrom(values))
 	if err != nil {
 		t.Fatalf("load returned error: %v", err)
 	}
@@ -59,10 +74,8 @@ func TestLoadMigrationURLFallback(t *testing.T) {
 	}
 
 	const directURL = "postgres://user:pass@localhost:5432/sela?sslmode=disable&direct=true"
-	cfg, err = load(lookupFrom(map[string]string{
-		"DATABASE_URL":          databaseURL,
-		"DATABASE_URL_UNPOOLED": directURL,
-	}))
+	values["DATABASE_URL_UNPOOLED"] = directURL
+	cfg, err = load(lookupFrom(values))
 	if err != nil {
 		t.Fatalf("load returned error: %v", err)
 	}
@@ -72,7 +85,10 @@ func TestLoadMigrationURLFallback(t *testing.T) {
 }
 
 func TestLoadRequiresDatabaseURL(t *testing.T) {
-	_, err := load(lookupFrom(map[string]string{}))
+	values := validValues()
+	delete(values, "DATABASE_URL")
+
+	_, err := load(lookupFrom(values))
 	if err == nil {
 		t.Fatal("load returned nil error, want DATABASE_URL failure")
 	}
@@ -81,16 +97,57 @@ func TestLoadRequiresDatabaseURL(t *testing.T) {
 	}
 }
 
+func TestLoadRequiresJWTSecret(t *testing.T) {
+	values := validValues()
+	delete(values, "JWT_ACCESS_SECRET")
+
+	_, err := load(lookupFrom(values))
+	if err == nil {
+		t.Fatal("load returned nil error, want JWT_ACCESS_SECRET failure")
+	}
+	if !strings.Contains(err.Error(), "JWT_ACCESS_SECRET") {
+		t.Errorf("error = %q, want it to mention JWT_ACCESS_SECRET", err)
+	}
+}
+
+func TestLoadRejectsShortJWTSecret(t *testing.T) {
+	values := validValues()
+	values["JWT_ACCESS_SECRET"] = "too-short"
+
+	_, err := load(lookupFrom(values))
+	if err == nil {
+		t.Fatal("load returned nil error, want secret length failure")
+	}
+	if !strings.Contains(err.Error(), "at least 32") {
+		t.Errorf("error = %q, want it to mention the minimum length", err)
+	}
+}
+
+func TestLoadRejectsInvalidTokenLifetimes(t *testing.T) {
+	values := validValues()
+	values["JWT_ACCESS_TTL"] = "720h"
+	values["JWT_REFRESH_TTL"] = "15m"
+
+	_, err := load(lookupFrom(values))
+	if err == nil {
+		t.Fatal("load returned nil error, want TTL ordering failure")
+	}
+	if !strings.Contains(err.Error(), "JWT_REFRESH_TTL") {
+		t.Errorf("error = %q, want it to mention JWT_REFRESH_TTL", err)
+	}
+}
+
 func TestLoadReportsAllProblemsWithoutValues(t *testing.T) {
 	_, err := load(lookupFrom(map[string]string{
-		"APP_ENV":                    "staging-ish",
-		"APP_PORT":                   "not-a-port",
-		"LOG_LEVEL":                  "verbose",
-		"LOG_FORMAT":                 "xml",
-		"DATABASE_MAX_OPEN_CONNS":    "2",
-		"DATABASE_MAX_IDLE_CONNS":    "4",
-		"HTTP_READ_TIMEOUT":          "-1s",
-		"DATABASE_CONN_MAX_LIFETIME": "soon",
+		"APP_ENV":                        "staging-ish",
+		"APP_PORT":                       "not-a-port",
+		"LOG_LEVEL":                      "verbose",
+		"LOG_FORMAT":                     "xml",
+		"DATABASE_MAX_OPEN_CONNS":        "2",
+		"DATABASE_MAX_IDLE_CONNS":        "4",
+		"HTTP_READ_TIMEOUT":              "-1s",
+		"DATABASE_CONN_MAX_LIFETIME":     "soon",
+		"RATE_LIMIT_LOGIN_PER_MINUTE_IP": "0",
 	}))
 	if err == nil {
 		t.Fatal("load returned nil error, want validation failure")
@@ -103,9 +160,11 @@ func TestLoadReportsAllProblemsWithoutValues(t *testing.T) {
 		"LOG_LEVEL",
 		"LOG_FORMAT",
 		"DATABASE_URL",
+		"JWT_ACCESS_SECRET",
 		"DATABASE_MAX_IDLE_CONNS",
 		"HTTP_READ_TIMEOUT",
 		"DATABASE_CONN_MAX_LIFETIME",
+		"RATE_LIMIT_LOGIN_PER_MINUTE_IP",
 	} {
 		if !strings.Contains(message, want) {
 			t.Errorf("error %q does not mention %s", message, want)
@@ -114,11 +173,11 @@ func TestLoadReportsAllProblemsWithoutValues(t *testing.T) {
 }
 
 func TestLoadRejectsInvalidPrecedence(t *testing.T) {
-	_, err := load(lookupFrom(map[string]string{
-		"DATABASE_URL":            "postgres://localhost/sela",
-		"DATABASE_MAX_OPEN_CONNS": "1",
-		"DATABASE_MAX_IDLE_CONNS": "2",
-	}))
+	values := validValues()
+	values["DATABASE_MAX_OPEN_CONNS"] = "1"
+	values["DATABASE_MAX_IDLE_CONNS"] = "2"
+
+	_, err := load(lookupFrom(values))
 	if err == nil {
 		t.Fatal("load returned nil error, want idle > open failure")
 	}

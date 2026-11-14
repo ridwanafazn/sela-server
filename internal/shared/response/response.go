@@ -3,6 +3,8 @@ package response
 
 import (
 	"net/http"
+	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -50,6 +52,18 @@ func Collection(c *gin.Context, data any, pagination Pagination) {
 // unknown errors are converted to a safe 500 response.
 func Error(c *gin.Context, err error) {
 	apiErr := apierrors.From(err)
+
+	if apiErr.Status >= http.StatusInternalServerError {
+		_ = c.Error(err)
+	}
+
+	if apiErr.RetryAfter > 0 {
+		seconds := int(apiErr.RetryAfter.Round(time.Second) / time.Second)
+		if seconds < 1 {
+			seconds = 1
+		}
+		c.Header("Retry-After", strconv.Itoa(seconds))
+	}
 
 	details := apiErr.Details
 	if details == nil {

@@ -56,6 +56,21 @@ func AccessLog(log *slog.Logger) gin.HandlerFunc {
 	}
 }
 
+// ErrorLog records unexpected server errors. Client errors are expected
+// outcomes and are not logged with their details.
+func ErrorLog(log *slog.Logger) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Next()
+
+		for _, entry := range c.Errors {
+			log.ErrorContext(c.Request.Context(), "request failed",
+				slog.String("request_id", requestid.From(c.Request.Context())),
+				slog.String("error", entry.Err.Error()),
+			)
+		}
+	}
+}
+
 // Recovery converts panics into the canonical error envelope. The stack is
 // logged for diagnosis; request data is not.
 func Recovery(log *slog.Logger) gin.HandlerFunc {
