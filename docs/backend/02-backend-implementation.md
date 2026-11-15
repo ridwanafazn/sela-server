@@ -367,6 +367,13 @@ Never log full journal or message content by default.
 - Preferences.
 - Journal CRUD.
 - Conversation persistence.
+- Memory extraction.
+- Insight generation.
+- Account deletion.
+- Safety, evaluation, and cost controls.
+
+Backend Phase 2 is frozen at `v0.2.0`; see
+`docs/backend/10-phase-2-freeze.md`.
 
 ### Phase 3: AI Capabilities
 

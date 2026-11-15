@@ -90,6 +90,9 @@ Out of scope:
 
 ## 5. Phase 2 — Core MVP
 
+Backend status: complete and frozen at `v0.2.0` (2026-11-15). Mobile delivery
+and staging deployment remain separate work.
+
 Goal: deliver the core reflection loop.
 
 Backend:

@@ -17,6 +17,18 @@ Our philosophy:
 5. Simple experience, intelligent system: the interface stays focused while backend intelligence handles complexity.
 6. Privacy by default: personal journal content must be protected throughout its lifecycle.
 
+## Backend Status
+
+Backend Phase 2 is complete and frozen at `v0.2.0`.
+
+- API contract: OpenAPI `1.3.0`.
+- Database schema: migration version `16`.
+- Release notes: `CHANGELOG.md`.
+- Freeze checklist and next inputs: `docs/backend/10-phase-2-freeze.md`.
+
+The mobile application, staging deployment, real embedding provider, and Phase 3
+beta hardening are separate deliverables.
+
 ## Repositories
 
 SELA uses two repositories.
