@@ -126,6 +126,93 @@ func joinKeyParts(parts []string) string {
 	return result
 }
 
+// EnqueueIdempotent inserts a job or returns the existing job for the same
+// user and idempotency key.
+func (q *Queue) EnqueueIdempotent(ctx context.Context, job *Job) (string, bool, error) {
+	if job.UserID == nil || *job.UserID == "" {
+		return "", false, fmt.Errorf("job user_id is required")
+	}
+	if job.IdempotencyKey == nil || *job.IdempotencyKey == "" {
+		return "", false, fmt.Errorf("job idempotency key is required")
+	}
+	if job.ID == "" {
+		id, err := ids.New()
+		if err != nil {
+			return "", false, err
+		}
+		job.ID = id
+	}
+	if job.MaxAttempts <= 0 {
+		job.MaxAttempts = defaultMaxAttempts
+	}
+	if job.RunAt.IsZero() {
+		job.RunAt = time.Now().UTC()
+	}
+	if job.Status == "" {
+		job.Status = StatusPending
+	}
+
+	payload := "{}"
+	if len(job.Payload) > 0 {
+		payload = string(job.Payload)
+	}
+
+	result := q.db.WithContext(ctx).Exec(
+		`INSERT INTO scheduled_jobs
+		 (id, user_id, job_type, payload, status, attempts, max_attempts, run_at, idempotency_key, created_at, updated_at)
+		 VALUES (?, ?, ?, ?::jsonb, ?, 0, ?, ?, ?, ?, ?)
+		 ON CONFLICT (user_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING`,
+		job.ID, *job.UserID, job.JobType, payload, job.Status, job.MaxAttempts,
+		job.RunAt, *job.IdempotencyKey, time.Now().UTC(), time.Now().UTC(),
+	)
+	if result.Error != nil {
+		return "", false, result.Error
+	}
+	if result.RowsAffected == 1 {
+		return job.ID, true, nil
+	}
+
+	existing, err := q.FindByUserAndKey(ctx, *job.UserID, *job.IdempotencyKey)
+	if err != nil {
+		return "", false, err
+	}
+	return existing.ID, false, nil
+}
+
+// Get returns one user-owned job.
+func (q *Queue) Get(ctx context.Context, userID, jobID string) (*Job, error) {
+	var claimed Job
+	if err := q.db.WithContext(ctx).
+		Where("id = ? AND user_id = ?", jobID, userID).
+		Take(&claimed).Error; err != nil {
+		return nil, err
+	}
+	return &claimed, nil
+}
+
+// FindByUserAndKey returns a job by its user-scoped idempotency key.
+func (q *Queue) FindByUserAndKey(ctx context.Context, userID, key string) (*Job, error) {
+	var claimed Job
+	if err := q.db.WithContext(ctx).
+		Where("user_id = ? AND idempotency_key = ?", userID, key).
+		Take(&claimed).Error; err != nil {
+		return nil, err
+	}
+	return &claimed, nil
+}
+
+// SetResult stores a structured job outcome.
+func (q *Queue) SetResult(ctx context.Context, jobID string, result any) error {
+	encoded, err := json.Marshal(result)
+	if err != nil {
+		return fmt.Errorf("encode job result: %w", err)
+	}
+	return q.db.WithContext(ctx).Exec(
+		`UPDATE scheduled_jobs SET result = ?::jsonb, updated_at = now() WHERE id = ?`,
+		string(encoded), jobID,
+	).Error
+}
+
 // Enqueue adds a generic job outside a transaction.
 func (q *Queue) Enqueue(ctx context.Context, job *Job) error {
 	if job.ID == "" {
@@ -171,6 +258,7 @@ func (q *Queue) Claim(ctx context.Context, workerID string) (*Job, error) {
 		       WHEN attempts >= max_attempts THEN 'job lock expired after final attempt'
 		       ELSE last_error
 		     END,
+		     result = NULL,
 		     updated_at = now()
 		 WHERE status = 'processing' AND locked_at < ?`,
 		time.Now().UTC().Add(-staleLockAge),
@@ -231,7 +319,7 @@ func (q *Queue) Complete(ctx context.Context, jobID string) error {
 func (q *Queue) Retry(ctx context.Context, jobID, message string, runAt time.Time) error {
 	return q.db.WithContext(ctx).Exec(
 		`UPDATE scheduled_jobs
-		 SET status = 'retry', locked_at = NULL, locked_by = NULL, last_error = ?, run_at = ?, updated_at = now()
+		 SET status = 'retry', locked_at = NULL, locked_by = NULL, last_error = ?, run_at = ?, result = NULL, updated_at = now()
 		 WHERE id = ?`,
 		message, runAt, jobID,
 	).Error
@@ -241,7 +329,7 @@ func (q *Queue) Retry(ctx context.Context, jobID, message string, runAt time.Tim
 func (q *Queue) Fail(ctx context.Context, jobID, message string) error {
 	return q.db.WithContext(ctx).Exec(
 		`UPDATE scheduled_jobs
-		 SET status = 'failed', locked_at = NULL, locked_by = NULL, last_error = ?, updated_at = now()
+		 SET status = 'failed', locked_at = NULL, locked_by = NULL, last_error = ?, result = NULL, updated_at = now()
 		 WHERE id = ?`,
 		message, jobID,
 	).Error

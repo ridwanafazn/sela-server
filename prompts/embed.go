@@ -24,3 +24,11 @@ var MemoryExtractionV2 string
 
 // MemoryExtractionVersion is recorded in extraction job metadata.
 const MemoryExtractionVersion = "memory_extraction/v2"
+
+// InsightV1 is the version 1 insight generation system prompt.
+//
+//go:embed insight/v1.md
+var InsightV1 string
+
+// InsightVersion is stored with generated insights and jobs.
+const InsightVersion = "insight/v1"

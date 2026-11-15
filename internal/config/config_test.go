@@ -59,6 +59,9 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.RateLimit.CompanionPerMinute != 30 {
 		t.Errorf("CompanionPerMinute = %d, want 30", cfg.RateLimit.CompanionPerMinute)
 	}
+	if cfg.RateLimit.InsightPerHour != 5 || cfg.RateLimit.InsightPerDay != 20 {
+		t.Errorf("insight limits = (%d, %d), want (5, 20)", cfg.RateLimit.InsightPerHour, cfg.RateLimit.InsightPerDay)
+	}
 	if cfg.AI.Provider != "fake" || cfg.AI.Model != "" {
 		t.Errorf("AI defaults = (%q, %q), want (fake, empty model)", cfg.AI.Provider, cfg.AI.Model)
 	}

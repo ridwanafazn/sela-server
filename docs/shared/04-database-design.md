@@ -273,6 +273,7 @@ Fields:
 
 - id.
 - user_id.
+- job_id, nullable and unique when present.
 - title.
 - summary.
 - observation.
@@ -358,6 +359,7 @@ Fields:
 - locked_at, nullable.
 - locked_by, nullable.
 - last_error, nullable.
+- result JSONB, nullable; structured outcome for jobs such as insight generation.
 - idempotency_key, nullable.
 - created_at.
 - updated_at.
@@ -450,6 +452,7 @@ Recommended indexes:
 - `personal_memories(user_id, category)`.
 - `insights(user_id, created_at DESC, id DESC)`.
 - `insights(user_id, period_start)`.
+- `insights(job_id)` unique when `job_id` is present.
 - `memory_sources(memory_id)`.
 - `memory_conflicts(memory_id, conflicting_memory_id)` unique.
 - `memory_conflicts(conflicting_memory_id)`.

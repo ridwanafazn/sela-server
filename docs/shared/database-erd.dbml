@@ -176,6 +176,7 @@ Table memory_conflicts {
 Table insights {
   id uuid [pk]
   user_id uuid [not null]
+  job_id uuid [unique]
   title varchar(200) [not null]
   summary text [not null]
   observation text [not null]
@@ -247,6 +248,7 @@ Table scheduled_jobs {
   locked_at timestamptz
   locked_by varchar(200)
   last_error text
+  result jsonb
   idempotency_key uuid
   created_at timestamptz [not null]
   updated_at timestamptz [not null]

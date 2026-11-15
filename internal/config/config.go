@@ -86,6 +86,8 @@ type RateLimit struct {
 	RegisterPerHourIP   int
 	RefreshPerMinuteIP  int
 	CompanionPerMinute  int
+	InsightPerHour      int
+	InsightPerDay       int
 }
 
 // AI holds provider and model settings. Fake providers are the local default
@@ -255,6 +257,8 @@ func load(lookup func(string) (string, bool)) (*Config, error) {
 		RegisterPerHourIP:   intValue(lookup, "RATE_LIMIT_REGISTER_PER_HOUR_IP", 3, &problems),
 		RefreshPerMinuteIP:  intValue(lookup, "RATE_LIMIT_REFRESH_PER_MINUTE_IP", 30, &problems),
 		CompanionPerMinute:  intValue(lookup, "RATE_LIMIT_COMPANION_PER_MINUTE", 30, &problems),
+		InsightPerHour:      intValue(lookup, "RATE_LIMIT_INSIGHT_PER_HOUR", 5, &problems),
+		InsightPerDay:       intValue(lookup, "RATE_LIMIT_INSIGHT_PER_DAY", 20, &problems),
 	}
 	if rateLimitCfg.TrustedProxyHops < 0 || rateLimitCfg.TrustedProxyHops > 10 {
 		problems = append(problems, "RATE_LIMIT_TRUSTED_PROXY_HOPS must be between 0 and 10")
@@ -265,6 +269,8 @@ func load(lookup func(string) (string, bool)) (*Config, error) {
 		"RATE_LIMIT_REGISTER_PER_HOUR_IP":   rateLimitCfg.RegisterPerHourIP,
 		"RATE_LIMIT_REFRESH_PER_MINUTE_IP":  rateLimitCfg.RefreshPerMinuteIP,
 		"RATE_LIMIT_COMPANION_PER_MINUTE":   rateLimitCfg.CompanionPerMinute,
+		"RATE_LIMIT_INSIGHT_PER_HOUR":       rateLimitCfg.InsightPerHour,
+		"RATE_LIMIT_INSIGHT_PER_DAY":        rateLimitCfg.InsightPerDay,
 	} {
 		if value < 1 {
 			problems = append(problems, key+" must be at least 1")

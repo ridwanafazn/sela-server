@@ -452,6 +452,11 @@ func TestPhase2SchemaConstraints(t *testing.T) {
 		"scheduled_jobs_user_idempotency_key_idx",
 		"scheduled_jobs_claimable_idx",
 	})
+	assertIndexesExist(t, db, "insights", []string{
+		"insights_job_id_key",
+		"insights_user_id_created_at_id_idx",
+		"insights_user_id_period_start_idx",
+	})
 }
 
 func vectorLiteral(dimension int) string {

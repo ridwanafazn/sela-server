@@ -20,6 +20,7 @@ const (
 	TypeJournalEmbedding        = "journal.embedding"
 	TypeJournalMemoryExtraction = "journal.memory_extraction"
 	TypeMessageMemoryExtraction = "message.memory_extraction"
+	TypeInsightGenerate         = "insight.generate"
 )
 
 // Job is a durable scheduled task.
@@ -35,6 +36,7 @@ type Job struct {
 	LockedAt       *time.Time `gorm:"column:locked_at"`
 	LockedBy       *string    `gorm:"column:locked_by"`
 	LastError      *string    `gorm:"column:last_error"`
+	Result         []byte     `gorm:"column:result"`
 	IdempotencyKey *string    `gorm:"column:idempotency_key;type:uuid"`
 	CreatedAt      time.Time  `gorm:"column:created_at"`
 	UpdatedAt      time.Time  `gorm:"column:updated_at"`

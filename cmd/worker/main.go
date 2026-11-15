@@ -15,6 +15,7 @@ import (
 
 	"github.com/ridwanafazn/sela-server/internal/config"
 	"github.com/ridwanafazn/sela-server/internal/modules/ai"
+	"github.com/ridwanafazn/sela-server/internal/modules/insight"
 	"github.com/ridwanafazn/sela-server/internal/modules/job"
 	"github.com/ridwanafazn/sela-server/internal/modules/journal"
 	"github.com/ridwanafazn/sela-server/internal/modules/memory"
@@ -83,6 +84,12 @@ func run() error {
 		cfg.AI.Model,
 		log,
 	)
+	insightGeneration := insight.NewGenerationService(
+		insight.NewRepository(db.Gorm),
+		llm,
+		cfg.AI.Model,
+		log,
+	)
 
 	queue := job.NewQueue(db.Gorm)
 	handlers := map[string]job.Handler{
@@ -122,6 +129,20 @@ func run() error {
 			}
 			return extractionService.ProcessMessage(ctx, payload.MessageID)
 		}),
+		job.TypeInsightGenerate: job.HandlerFunc(func(ctx context.Context, claimed *job.Job) error {
+			if claimed.UserID == nil || *claimed.UserID == "" {
+				return fmt.Errorf("%w: insight job is missing user_id", ai.ErrInvalidRequest)
+			}
+			var payload insight.JobPayload
+			if err := json.Unmarshal(claimed.Payload, &payload); err != nil {
+				return fmt.Errorf("%w: decode insight payload: %v", ai.ErrInvalidRequest, err)
+			}
+			result, err := insightGeneration.Process(ctx, claimed.ID, *claimed.UserID, payload)
+			if err != nil {
+				return err
+			}
+			return queue.SetResult(ctx, claimed.ID, result)
+		}),
 	}
 
 	hostname, _ := os.Hostname()
@@ -133,6 +154,7 @@ func run() error {
 		slog.String("embedding_provider", cfg.AI.EmbeddingProvider),
 		slog.String("embedding_model", embeddingModel),
 		slog.String("memory_prompt_version", prompts.MemoryExtractionVersion),
+		slog.String("insight_prompt_version", prompts.InsightVersion),
 	)
 
 	if *once {

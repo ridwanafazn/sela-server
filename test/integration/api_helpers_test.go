@@ -127,6 +127,8 @@ func testConfig() *config.Config {
 			RegisterPerHourIP:   1000,
 			RefreshPerMinuteIP:  1000,
 			CompanionPerMinute:  1000,
+			InsightPerHour:      1000,
+			InsightPerDay:       1000,
 		},
 		AI: config.AI{
 			Provider:           "fake",

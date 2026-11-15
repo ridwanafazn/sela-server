@@ -210,6 +210,7 @@ Initial limits are engineering defaults, not contractual quotas:
 | Journal writes | 60 per minute per user |
 | Companion messages | 30 per minute per user |
 | Insight generation | 5 per hour and 20 per day per user |
+| Insight generation | 5 per hour and 20 per day per user |
 
 Rate-limited responses use `429 RATE_LIMITED` and SHOULD include `Retry-After`.
 

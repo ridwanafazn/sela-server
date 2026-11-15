@@ -17,6 +17,7 @@ import (
 	"github.com/ridwanafazn/sela-server/internal/modules/ai"
 	"github.com/ridwanafazn/sela-server/internal/modules/auth"
 	"github.com/ridwanafazn/sela-server/internal/modules/conversation"
+	"github.com/ridwanafazn/sela-server/internal/modules/insight"
 	"github.com/ridwanafazn/sela-server/internal/modules/job"
 	"github.com/ridwanafazn/sela-server/internal/modules/journal"
 	"github.com/ridwanafazn/sela-server/internal/modules/memory"
@@ -93,6 +94,18 @@ func BuildRouter(cfg *config.Config, log *slog.Logger, db *database.DB) (*gin.En
 	memoryService := memory.NewService(memoryRepo, log)
 	memoryHandler := memory.NewHandler(memoryService)
 
+	insightService := insight.NewService(
+		insight.NewRepository(db.Gorm),
+		queue,
+		limiter,
+		insight.Limits{
+			PerHour: cfg.RateLimit.InsightPerHour,
+			PerDay:  cfg.RateLimit.InsightPerDay,
+		},
+		log,
+	)
+	insightHandler := insight.NewHandler(insightService)
+
 	conversationService := conversation.NewService(
 		conversation.NewRepository(db.Gorm),
 		retrieval,
@@ -142,6 +155,13 @@ func BuildRouter(cfg *config.Config, log *slog.Logger, db *database.DB) (*gin.En
 			protected.PATCH("/memories/:memoryId", memoryHandler.Update)
 			protected.DELETE("/memories/:memoryId", memoryHandler.Delete)
 			protected.POST("/memories/:memoryId/feedback", memoryHandler.Feedback)
+
+			protected.GET("/insights", insightHandler.List)
+			protected.POST("/insights", insightHandler.Request)
+			protected.GET("/insight-jobs/:jobId", insightHandler.JobStatus)
+			protected.GET("/insights/:insightId", insightHandler.Get)
+			protected.DELETE("/insights/:insightId", insightHandler.Delete)
+			protected.POST("/insights/:insightId/feedback", insightHandler.Feedback)
 		},
 	}), nil
 }
