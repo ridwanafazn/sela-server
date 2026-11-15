@@ -227,6 +227,7 @@ func TestProtectedEndpointsRequireAuthentication(t *testing.T) {
 		{name: "me with garbage token", method: http.MethodGet, path: "/api/v1/me", token: "garbage"},
 		{name: "logout without token", method: http.MethodPost, path: "/api/v1/auth/logout"},
 		{name: "patch me without token", method: http.MethodPatch, path: "/api/v1/me", body: map[string]any{"language": "id"}},
+		{name: "delete me without token", method: http.MethodDelete, path: "/api/v1/me", body: map[string]any{"password": "x", "confirmation": "DELETE"}},
 	}
 
 	for _, test := range tests {

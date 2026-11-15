@@ -67,6 +67,17 @@ func (q *Queue) EnqueueMessageMemoryExtraction(ctx context.Context, tx *gorm.DB,
 	)
 }
 
+// EnqueueAccountDeletion adds the durable account purge job inside a
+// transaction.
+func (q *Queue) EnqueueAccountDeletion(ctx context.Context, tx *gorm.DB, userID string, runAt time.Time) error {
+	return q.enqueueJob(
+		ctx, tx, userID, TypeAccountDelete,
+		map[string]string{},
+		[]string{TypeAccountDelete, userID},
+		runAt,
+	)
+}
+
 func (q *Queue) enqueueJournalJob(
 	ctx context.Context,
 	tx *gorm.DB,

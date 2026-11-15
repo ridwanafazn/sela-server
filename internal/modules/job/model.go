@@ -21,6 +21,7 @@ const (
 	TypeJournalMemoryExtraction = "journal.memory_extraction"
 	TypeMessageMemoryExtraction = "message.memory_extraction"
 	TypeInsightGenerate         = "insight.generate"
+	TypeAccountDelete           = "account.delete"
 )
 
 // Job is a durable scheduled task.

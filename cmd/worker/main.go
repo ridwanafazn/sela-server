@@ -14,6 +14,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/ridwanafazn/sela-server/internal/config"
+	"github.com/ridwanafazn/sela-server/internal/modules/account"
 	"github.com/ridwanafazn/sela-server/internal/modules/ai"
 	"github.com/ridwanafazn/sela-server/internal/modules/insight"
 	"github.com/ridwanafazn/sela-server/internal/modules/job"
@@ -90,6 +91,7 @@ func run() error {
 		cfg.AI.Model,
 		log,
 	)
+	accountRepository := account.NewRepository(db.Gorm)
 
 	queue := job.NewQueue(db.Gorm)
 	handlers := map[string]job.Handler{
@@ -142,6 +144,20 @@ func run() error {
 				return err
 			}
 			return queue.SetResult(ctx, claimed.ID, result)
+		}),
+		job.TypeAccountDelete: job.HandlerFunc(func(ctx context.Context, claimed *job.Job) error {
+			if claimed.UserID == nil || *claimed.UserID == "" {
+				return fmt.Errorf("%w: account deletion job is missing user_id", ai.ErrInvalidRequest)
+			}
+			purged, err := accountRepository.Purge(ctx, *claimed.UserID)
+			if err != nil {
+				return err
+			}
+			log.InfoContext(ctx, "account purge completed",
+				slog.String("job_id", claimed.ID),
+				slog.Bool("purged", purged),
+			)
+			return nil
 		}),
 	}
 

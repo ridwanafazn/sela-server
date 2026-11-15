@@ -14,6 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/ridwanafazn/sela-server/internal/config"
+	"github.com/ridwanafazn/sela-server/internal/modules/account"
 	"github.com/ridwanafazn/sela-server/internal/modules/ai"
 	"github.com/ridwanafazn/sela-server/internal/modules/auth"
 	"github.com/ridwanafazn/sela-server/internal/modules/conversation"
@@ -79,6 +80,16 @@ func BuildRouter(cfg *config.Config, log *slog.Logger, db *database.DB) (*gin.En
 	userHandler := user.NewHandler(userService)
 
 	queue := job.NewQueue(db.Gorm)
+	accountService := account.NewService(
+		account.NewRepository(db.Gorm),
+		passwords,
+		queue,
+		limiter,
+		account.Limits{PerHour: cfg.RateLimit.AccountDeletePerHour},
+		log,
+	)
+	accountHandler := account.NewHandler(accountService)
+
 	journalRepo := journal.NewRepository(db.Gorm)
 	journalService := journal.NewService(journalRepo, queue)
 	journalHandler := journal.NewHandler(journalService)
@@ -136,6 +147,7 @@ func BuildRouter(cfg *config.Config, log *slog.Logger, db *database.DB) (*gin.En
 			protected.POST("/auth/logout", authHandler.Logout)
 			protected.GET("/me", userHandler.GetMe)
 			protected.PATCH("/me", userHandler.UpdateMe)
+			protected.DELETE("/me", accountHandler.DeleteMe)
 
 			protected.GET("/journals", journalHandler.List)
 			protected.POST("/journals", journalHandler.Create)

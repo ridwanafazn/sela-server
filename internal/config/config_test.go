@@ -62,6 +62,9 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.RateLimit.InsightPerHour != 5 || cfg.RateLimit.InsightPerDay != 20 {
 		t.Errorf("insight limits = (%d, %d), want (5, 20)", cfg.RateLimit.InsightPerHour, cfg.RateLimit.InsightPerDay)
 	}
+	if cfg.RateLimit.AccountDeletePerHour != 5 {
+		t.Errorf("AccountDeletePerHour = %d, want 5", cfg.RateLimit.AccountDeletePerHour)
+	}
 	if cfg.AI.Provider != "fake" || cfg.AI.Model != "" {
 		t.Errorf("AI defaults = (%q, %q), want (fake, empty model)", cfg.AI.Provider, cfg.AI.Model)
 	}

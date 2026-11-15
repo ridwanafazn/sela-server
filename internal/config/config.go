@@ -79,15 +79,16 @@ type JWT struct {
 
 // RateLimit holds the DB-backed authentication limits.
 type RateLimit struct {
-	Secret              string
-	TrustedProxyHops    int
-	LoginPerMinuteIP    int
-	LoginPerHourAccount int
-	RegisterPerHourIP   int
-	RefreshPerMinuteIP  int
-	CompanionPerMinute  int
-	InsightPerHour      int
-	InsightPerDay       int
+	Secret               string
+	TrustedProxyHops     int
+	LoginPerMinuteIP     int
+	LoginPerHourAccount  int
+	RegisterPerHourIP    int
+	RefreshPerMinuteIP   int
+	CompanionPerMinute   int
+	InsightPerHour       int
+	InsightPerDay        int
+	AccountDeletePerHour int
 }
 
 // AI holds provider and model settings. Fake providers are the local default
@@ -250,27 +251,29 @@ func load(lookup func(string) (string, bool)) (*Config, error) {
 	}
 
 	rateLimitCfg := RateLimit{
-		Secret:              rateLimitSecret,
-		TrustedProxyHops:    intValue(lookup, "RATE_LIMIT_TRUSTED_PROXY_HOPS", 0, &problems),
-		LoginPerMinuteIP:    intValue(lookup, "RATE_LIMIT_LOGIN_PER_MINUTE_IP", 5, &problems),
-		LoginPerHourAccount: intValue(lookup, "RATE_LIMIT_LOGIN_PER_HOUR_ACCOUNT", 10, &problems),
-		RegisterPerHourIP:   intValue(lookup, "RATE_LIMIT_REGISTER_PER_HOUR_IP", 3, &problems),
-		RefreshPerMinuteIP:  intValue(lookup, "RATE_LIMIT_REFRESH_PER_MINUTE_IP", 30, &problems),
-		CompanionPerMinute:  intValue(lookup, "RATE_LIMIT_COMPANION_PER_MINUTE", 30, &problems),
-		InsightPerHour:      intValue(lookup, "RATE_LIMIT_INSIGHT_PER_HOUR", 5, &problems),
-		InsightPerDay:       intValue(lookup, "RATE_LIMIT_INSIGHT_PER_DAY", 20, &problems),
+		Secret:               rateLimitSecret,
+		TrustedProxyHops:     intValue(lookup, "RATE_LIMIT_TRUSTED_PROXY_HOPS", 0, &problems),
+		LoginPerMinuteIP:     intValue(lookup, "RATE_LIMIT_LOGIN_PER_MINUTE_IP", 5, &problems),
+		LoginPerHourAccount:  intValue(lookup, "RATE_LIMIT_LOGIN_PER_HOUR_ACCOUNT", 10, &problems),
+		RegisterPerHourIP:    intValue(lookup, "RATE_LIMIT_REGISTER_PER_HOUR_IP", 3, &problems),
+		RefreshPerMinuteIP:   intValue(lookup, "RATE_LIMIT_REFRESH_PER_MINUTE_IP", 30, &problems),
+		CompanionPerMinute:   intValue(lookup, "RATE_LIMIT_COMPANION_PER_MINUTE", 30, &problems),
+		InsightPerHour:       intValue(lookup, "RATE_LIMIT_INSIGHT_PER_HOUR", 5, &problems),
+		InsightPerDay:        intValue(lookup, "RATE_LIMIT_INSIGHT_PER_DAY", 20, &problems),
+		AccountDeletePerHour: intValue(lookup, "RATE_LIMIT_ACCOUNT_DELETE_PER_HOUR", 5, &problems),
 	}
 	if rateLimitCfg.TrustedProxyHops < 0 || rateLimitCfg.TrustedProxyHops > 10 {
 		problems = append(problems, "RATE_LIMIT_TRUSTED_PROXY_HOPS must be between 0 and 10")
 	}
 	for key, value := range map[string]int{
-		"RATE_LIMIT_LOGIN_PER_MINUTE_IP":    rateLimitCfg.LoginPerMinuteIP,
-		"RATE_LIMIT_LOGIN_PER_HOUR_ACCOUNT": rateLimitCfg.LoginPerHourAccount,
-		"RATE_LIMIT_REGISTER_PER_HOUR_IP":   rateLimitCfg.RegisterPerHourIP,
-		"RATE_LIMIT_REFRESH_PER_MINUTE_IP":  rateLimitCfg.RefreshPerMinuteIP,
-		"RATE_LIMIT_COMPANION_PER_MINUTE":   rateLimitCfg.CompanionPerMinute,
-		"RATE_LIMIT_INSIGHT_PER_HOUR":       rateLimitCfg.InsightPerHour,
-		"RATE_LIMIT_INSIGHT_PER_DAY":        rateLimitCfg.InsightPerDay,
+		"RATE_LIMIT_LOGIN_PER_MINUTE_IP":     rateLimitCfg.LoginPerMinuteIP,
+		"RATE_LIMIT_LOGIN_PER_HOUR_ACCOUNT":  rateLimitCfg.LoginPerHourAccount,
+		"RATE_LIMIT_REGISTER_PER_HOUR_IP":    rateLimitCfg.RegisterPerHourIP,
+		"RATE_LIMIT_REFRESH_PER_MINUTE_IP":   rateLimitCfg.RefreshPerMinuteIP,
+		"RATE_LIMIT_COMPANION_PER_MINUTE":    rateLimitCfg.CompanionPerMinute,
+		"RATE_LIMIT_INSIGHT_PER_HOUR":        rateLimitCfg.InsightPerHour,
+		"RATE_LIMIT_INSIGHT_PER_DAY":         rateLimitCfg.InsightPerDay,
+		"RATE_LIMIT_ACCOUNT_DELETE_PER_HOUR": rateLimitCfg.AccountDeletePerHour,
 	} {
 		if value < 1 {
 			problems = append(problems, key+" must be at least 1")
