@@ -5,6 +5,7 @@ package config
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"strconv"
 	"strings"
@@ -30,6 +31,7 @@ type Config struct {
 	JWT       JWT
 	RateLimit RateLimit
 	AI        AI
+	Safety    Safety
 	Log       Log
 }
 
@@ -91,25 +93,35 @@ type RateLimit struct {
 	AccountDeletePerHour int
 }
 
-// AI holds provider and model settings. Fake providers are the local default
-// so the application can run without external credentials.
+// AI holds provider, model, pricing, and budget settings. Fake providers are
+// the local default so the application can run without external credentials.
 type AI struct {
-	Provider             string
-	BaseURL              string
-	APIKey               string
-	Model                string
-	Timeout              time.Duration
-	MaxRetries           int
-	EmbeddingProvider    string
-	EmbeddingBaseURL     string
-	EmbeddingAPIKey      string
-	EmbeddingModel       string
-	EmbeddingDimension   int
-	EmbeddingTimeout     time.Duration
-	VertexProjectID      string
-	VertexRegion         string
-	VertexEmbeddingModel string
-	VertexBaseURL        string
+	Provider                string
+	BaseURL                 string
+	APIKey                  string
+	Model                   string
+	Timeout                 time.Duration
+	MaxRetries              int
+	EmbeddingProvider       string
+	EmbeddingBaseURL        string
+	EmbeddingAPIKey         string
+	EmbeddingModel          string
+	EmbeddingDimension      int
+	EmbeddingTimeout        time.Duration
+	VertexProjectID         string
+	VertexRegion            string
+	VertexEmbeddingModel    string
+	VertexBaseURL           string
+	InputCostPerMillion     float64
+	OutputCostPerMillion    float64
+	EmbeddingCostPerMillion float64
+	UserMonthlyBudgetUSD    float64
+	GlobalMonthlyBudgetUSD  float64
+}
+
+// Safety holds crisis resource configuration.
+type Safety struct {
+	ResourcesFile string
 }
 
 // EmbeddingModelName returns the effective embedding model identifier.
@@ -281,22 +293,30 @@ func load(lookup func(string) (string, bool)) (*Config, error) {
 	}
 
 	aiCfg := AI{
-		Provider:             strings.ToLower(stringValue(lookup, "AI_PROVIDER", "fake")),
-		BaseURL:              strings.TrimSpace(stringValue(lookup, "AI_BASE_URL", "")),
-		APIKey:               strings.TrimSpace(stringValue(lookup, "AI_API_KEY", "")),
-		Model:                stringValue(lookup, "AI_MODEL", ""),
-		Timeout:              durationValue(lookup, "AI_TIMEOUT", 60*time.Second, &problems),
-		MaxRetries:           intValue(lookup, "AI_MAX_RETRIES", 3, &problems),
-		EmbeddingProvider:    strings.ToLower(stringValue(lookup, "EMBEDDING_PROVIDER", "fake")),
-		EmbeddingBaseURL:     strings.TrimSpace(stringValue(lookup, "EMBEDDING_BASE_URL", "")),
-		EmbeddingAPIKey:      strings.TrimSpace(stringValue(lookup, "EMBEDDING_API_KEY", "")),
-		EmbeddingModel:       stringValue(lookup, "EMBEDDING_MODEL", ""),
-		EmbeddingDimension:   intValue(lookup, "EMBEDDING_DIMENSION", 768, &problems),
-		EmbeddingTimeout:     durationValue(lookup, "EMBEDDING_TIMEOUT", 30*time.Second, &problems),
-		VertexProjectID:      strings.TrimSpace(stringValue(lookup, "VERTEX_PROJECT_ID", "")),
-		VertexRegion:         strings.TrimSpace(stringValue(lookup, "VERTEX_REGION", "asia-southeast1")),
-		VertexEmbeddingModel: stringValue(lookup, "VERTEX_EMBEDDING_MODEL", "text-embedding-004"),
-		VertexBaseURL:        strings.TrimSpace(stringValue(lookup, "VERTEX_BASE_URL", "")),
+		Provider:                strings.ToLower(stringValue(lookup, "AI_PROVIDER", "fake")),
+		BaseURL:                 strings.TrimSpace(stringValue(lookup, "AI_BASE_URL", "")),
+		APIKey:                  strings.TrimSpace(stringValue(lookup, "AI_API_KEY", "")),
+		Model:                   stringValue(lookup, "AI_MODEL", ""),
+		Timeout:                 durationValue(lookup, "AI_TIMEOUT", 60*time.Second, &problems),
+		MaxRetries:              intValue(lookup, "AI_MAX_RETRIES", 3, &problems),
+		EmbeddingProvider:       strings.ToLower(stringValue(lookup, "EMBEDDING_PROVIDER", "fake")),
+		EmbeddingBaseURL:        strings.TrimSpace(stringValue(lookup, "EMBEDDING_BASE_URL", "")),
+		EmbeddingAPIKey:         strings.TrimSpace(stringValue(lookup, "EMBEDDING_API_KEY", "")),
+		EmbeddingModel:          stringValue(lookup, "EMBEDDING_MODEL", ""),
+		EmbeddingDimension:      intValue(lookup, "EMBEDDING_DIMENSION", 768, &problems),
+		EmbeddingTimeout:        durationValue(lookup, "EMBEDDING_TIMEOUT", 30*time.Second, &problems),
+		VertexProjectID:         strings.TrimSpace(stringValue(lookup, "VERTEX_PROJECT_ID", "")),
+		VertexRegion:            strings.TrimSpace(stringValue(lookup, "VERTEX_REGION", "asia-southeast1")),
+		VertexEmbeddingModel:    stringValue(lookup, "VERTEX_EMBEDDING_MODEL", "text-embedding-004"),
+		VertexBaseURL:           strings.TrimSpace(stringValue(lookup, "VERTEX_BASE_URL", "")),
+		InputCostPerMillion:     floatValue(lookup, "AI_INPUT_COST_PER_MILLION", 0, &problems),
+		OutputCostPerMillion:    floatValue(lookup, "AI_OUTPUT_COST_PER_MILLION", 0, &problems),
+		EmbeddingCostPerMillion: floatValue(lookup, "AI_EMBEDDING_COST_PER_MILLION", 0, &problems),
+		UserMonthlyBudgetUSD:    floatValue(lookup, "AI_USER_MONTHLY_BUDGET_USD", 0, &problems),
+		GlobalMonthlyBudgetUSD:  floatValue(lookup, "AI_GLOBAL_MONTHLY_BUDGET_USD", 0, &problems),
+	}
+	safetyCfg := Safety{
+		ResourcesFile: strings.TrimSpace(stringValue(lookup, "SAFETY_RESOURCES_FILE", "")),
 	}
 
 	if !isOneOf(aiCfg.Provider, "fake", "openai") {
@@ -346,6 +366,18 @@ func load(lookup func(string) (string, bool)) (*Config, error) {
 		}
 	}
 
+	for key, value := range map[string]float64{
+		"AI_INPUT_COST_PER_MILLION":     aiCfg.InputCostPerMillion,
+		"AI_OUTPUT_COST_PER_MILLION":    aiCfg.OutputCostPerMillion,
+		"AI_EMBEDDING_COST_PER_MILLION": aiCfg.EmbeddingCostPerMillion,
+		"AI_USER_MONTHLY_BUDGET_USD":    aiCfg.UserMonthlyBudgetUSD,
+		"AI_GLOBAL_MONTHLY_BUDGET_USD":  aiCfg.GlobalMonthlyBudgetUSD,
+	} {
+		if value < 0 {
+			problems = append(problems, key+" must not be negative")
+		}
+	}
+
 	if len(problems) > 0 {
 		return nil, fmt.Errorf("invalid configuration: %s", strings.Join(problems, "; "))
 	}
@@ -362,6 +394,7 @@ func load(lookup func(string) (string, bool)) (*Config, error) {
 		JWT:       jwtCfg,
 		RateLimit: rateLimitCfg,
 		AI:        aiCfg,
+		Safety:    safetyCfg,
 		Log: Log{
 			Level:  logLevel,
 			Format: logFormat,
@@ -374,6 +407,19 @@ func stringValue(lookup func(string) (string, bool), key, fallback string) strin
 		return strings.TrimSpace(value)
 	}
 	return fallback
+}
+
+func floatValue(lookup func(string) (string, bool), key string, fallback float64, problems *[]string) float64 {
+	value, ok := lookup(key)
+	if !ok || strings.TrimSpace(value) == "" {
+		return fallback
+	}
+	parsed, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
+	if err != nil || math.IsNaN(parsed) || math.IsInf(parsed, 0) {
+		*problems = append(*problems, key+" must be a number")
+		return fallback
+	}
+	return parsed
 }
 
 func intValue(lookup func(string) (string, bool), key string, fallback int, problems *[]string) int {

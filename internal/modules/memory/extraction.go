@@ -15,6 +15,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/ridwanafazn/sela-server/internal/modules/ai"
+	"github.com/ridwanafazn/sela-server/internal/platform/aiusage"
 	"github.com/ridwanafazn/sela-server/internal/shared/ids"
 	"github.com/ridwanafazn/sela-server/prompts"
 )
@@ -100,24 +101,34 @@ type ExtractionRepository interface {
 
 // ExtractionService turns source records into candidate memories.
 type ExtractionService struct {
-	repo  ExtractionRepository
-	llm   ai.LLMProvider
-	model string
-	log   *slog.Logger
-	now   func() time.Time
+	repo     ExtractionRepository
+	llm      ai.LLMProvider
+	model    string
+	provider string
+	usage    *aiusage.Service
+	log      *slog.Logger
+	now      func() time.Time
 }
 
 // NewExtractionService creates the memory extraction pipeline.
-func NewExtractionService(repo ExtractionRepository, llm ai.LLMProvider, model string, log *slog.Logger) *ExtractionService {
+func NewExtractionService(
+	repo ExtractionRepository,
+	llm ai.LLMProvider,
+	model, provider string,
+	usage *aiusage.Service,
+	log *slog.Logger,
+) *ExtractionService {
 	if log == nil {
 		log = slog.Default()
 	}
 	return &ExtractionService{
-		repo:  repo,
-		llm:   llm,
-		model: model,
-		log:   log,
-		now:   time.Now,
+		repo:     repo,
+		llm:      llm,
+		model:    model,
+		provider: provider,
+		usage:    usage,
+		log:      log,
+		now:      time.Now,
 	}
 }
 
@@ -179,7 +190,25 @@ func (s *ExtractionService) process(ctx context.Context, source *extractionSourc
 	if s.llm == nil {
 		return fmt.Errorf("%w: language provider is not configured", ai.ErrInvalidRequest)
 	}
+	if s.usage != nil {
+		exhausted, err := s.usage.Exhausted(ctx, source.UserID)
+		if err != nil {
+			s.log.WarnContext(ctx, "memory extraction budget check failed", slog.String("error", err.Error()))
+		} else if exhausted {
+			s.log.WarnContext(ctx, "memory extraction skipped because the ai budget is exhausted",
+				slog.String("source_type", source.Type),
+				slog.String("source_id", source.ID),
+			)
+			return nil
+		}
+	}
 
+	operation := aiusage.OperationMemoryJournal
+	if source.Type == sourceTypeMessage {
+		operation = aiusage.OperationMemoryMessage
+	}
+	referenceID := source.ID
+	started := time.Now()
 	response, err := s.llm.Generate(ctx, ai.GenerateRequest{
 		Model:          s.model,
 		System:         prompts.MemoryExtractionV2,
@@ -189,13 +218,53 @@ func (s *ExtractionService) process(ctx context.Context, source *extractionSourc
 		ResponseSchema: extractionSchema,
 		SessionID:      "memory-extraction:" + source.Type + ":" + source.ID,
 	})
+	latency := time.Since(started)
 	if err != nil {
+		if s.usage != nil {
+			s.usage.Record(ctx, aiusage.Event{
+				UserID:        source.UserID,
+				Operation:     operation,
+				Provider:      s.provider,
+				Model:         s.model,
+				Latency:       latency,
+				Success:       false,
+				ErrorCategory: ai.ErrorCategory(err),
+				ReferenceID:   &referenceID,
+			})
+		}
 		return err
 	}
 
 	parsed, err := parseExtractionResponse(response.Content)
 	if err != nil {
+		if s.usage != nil {
+			s.usage.Record(ctx, aiusage.Event{
+				UserID:        source.UserID,
+				Operation:     operation,
+				Provider:      s.provider,
+				Model:         response.Model,
+				InputTokens:   response.Usage.InputTokens,
+				OutputTokens:  response.Usage.OutputTokens,
+				Latency:       latency,
+				Success:       false,
+				ErrorCategory: ai.ErrorCategory(err),
+				ReferenceID:   &referenceID,
+			})
+		}
 		return err
+	}
+	if s.usage != nil {
+		s.usage.Record(ctx, aiusage.Event{
+			UserID:       source.UserID,
+			Operation:    operation,
+			Provider:     s.provider,
+			Model:        response.Model,
+			InputTokens:  response.Usage.InputTokens,
+			OutputTokens: response.Usage.OutputTokens,
+			Latency:      latency,
+			Success:      true,
+			ReferenceID:  &referenceID,
+		})
 	}
 	if len(parsed) > maxCandidatesPerSource {
 		parsed = parsed[:maxCandidatesPerSource]

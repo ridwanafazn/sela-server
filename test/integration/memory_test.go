@@ -138,7 +138,7 @@ func TestMemoryExtractionAndReviewFlow(t *testing.T) {
 
 	repo := memory.NewRepository(db.Gorm)
 	fake := &ai.FakeLLM{StructuredReply: extractionReply(journal.ID, "The user finds late-night work stressful.")}
-	extraction := memory.NewExtractionService(repo, fake, "fake-chat", testLogger())
+	extraction := memory.NewExtractionService(repo, fake, "fake-chat", "fake", nil, testLogger())
 	processAllJobs(t, newMemoryWorker(db, extraction))
 
 	list := do(t, router, http.MethodGet, "/api/v1/memories", requestOptions{token: user.AccessToken})
@@ -303,7 +303,7 @@ func TestMemoryExtractionRejectsForeignSources(t *testing.T) {
 
 	repo := memory.NewRepository(db.Gorm)
 	fake := &ai.FakeLLM{StructuredReply: extractionReply(strangerJournal.ID, "The user wants a morning walking routine.")}
-	extraction := memory.NewExtractionService(repo, fake, "fake-chat", testLogger())
+	extraction := memory.NewExtractionService(repo, fake, "fake-chat", "fake", nil, testLogger())
 
 	if err := extraction.ProcessJournal(ctx, ownerJournal.ID); err != nil {
 		t.Fatalf("foreign-source extraction: %v", err)
@@ -640,7 +640,7 @@ func TestMemoryExtractionPersistsConflicts(t *testing.T) {
 		"The user prefers working in the evening.",
 		[]string{existing.ID},
 	)}
-	extraction := memory.NewExtractionService(repo, fake, "fake-chat", testLogger())
+	extraction := memory.NewExtractionService(repo, fake, "fake-chat", "fake", nil, testLogger())
 	if err := extraction.ProcessJournal(ctx, conflictJournal.ID); err != nil {
 		t.Fatalf("extract conflict: %v", err)
 	}
@@ -703,7 +703,7 @@ func TestMessageMemoryExtraction(t *testing.T) {
 
 	repo := memory.NewRepository(db.Gorm)
 	fake := &ai.FakeLLM{StructuredReply: extractionReply(payload.UserMessage.ID, "The user prefers a walk after lunch.")}
-	extraction := memory.NewExtractionService(repo, fake, "fake-chat", testLogger())
+	extraction := memory.NewExtractionService(repo, fake, "fake-chat", "fake", nil, testLogger())
 	processAllJobs(t, newMemoryWorker(db, extraction))
 
 	list := decodeJSON[memoryListEnvelope](t, do(t, router, http.MethodGet,
@@ -768,7 +768,7 @@ func TestMessageMemoryExtractionRejectsForeignSource(t *testing.T) {
 
 	repo := memory.NewRepository(db.Gorm)
 	fake := &ai.FakeLLM{StructuredReply: extractionReply(strangerMessage.ID, "The user wants to read more.")}
-	extraction := memory.NewExtractionService(repo, fake, "fake-chat", testLogger())
+	extraction := memory.NewExtractionService(repo, fake, "fake-chat", "fake", nil, testLogger())
 	if err := extraction.ProcessMessage(ctx, ownerMessage.ID); err != nil {
 		t.Fatalf("foreign-source extraction: %v", err)
 	}

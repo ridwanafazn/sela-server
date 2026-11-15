@@ -19,6 +19,7 @@ func BuildSystemPrompt(
 	language, style string,
 	retrieved []journal.RetrievedJournal,
 	memories []memory.RetrievedMemory,
+	safetyNote string,
 ) (string, error) {
 	var builder strings.Builder
 	err := companionTemplate.Execute(&builder, struct {
@@ -26,11 +27,13 @@ func BuildSystemPrompt(
 		Style    string
 		Memories string
 		Context  string
+		Safety   string
 	}{
 		Language: language,
 		Style:    style,
 		Memories: buildMemoryContext(memories),
 		Context:  buildRetrievedContext(retrieved),
+		Safety:   safetyNote,
 	})
 	if err != nil {
 		return "", fmt.Errorf("render companion prompt: %w", err)
@@ -84,7 +87,7 @@ func buildRetrievedContext(retrieved []journal.RetrievedJournal) string {
 			break
 		}
 
-		content := truncateToRunes(entry.Content, available)
+		content := escapePromptText(truncateToRunes(entry.Content, available))
 		builder.WriteString(header)
 		builder.WriteString(content)
 		builder.WriteString(footer)

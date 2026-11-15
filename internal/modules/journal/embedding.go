@@ -5,10 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"gorm.io/gorm"
 
 	"github.com/ridwanafazn/sela-server/internal/modules/ai"
+	"github.com/ridwanafazn/sela-server/internal/platform/aiusage"
 )
 
 // EmbeddingService generates and replaces journal vectors.
@@ -16,8 +18,10 @@ type EmbeddingService struct {
 	repo       *Repository
 	embeddings ai.EmbeddingProvider
 	model      string
+	provider   string
 	dimension  int
 	options    ChunkOptions
+	usage      *aiusage.Service
 	log        *slog.Logger
 }
 
@@ -25,8 +29,9 @@ type EmbeddingService struct {
 func NewEmbeddingService(
 	repo *Repository,
 	embeddings ai.EmbeddingProvider,
-	model string,
+	model, provider string,
 	dimension int,
+	usage *aiusage.Service,
 	log *slog.Logger,
 ) *EmbeddingService {
 	if dimension <= 0 {
@@ -39,8 +44,10 @@ func NewEmbeddingService(
 		repo:       repo,
 		embeddings: embeddings,
 		model:      model,
+		provider:   provider,
 		dimension:  dimension,
 		options:    DefaultChunkOptions(),
+		usage:      usage,
 		log:        log,
 	}
 }
@@ -74,11 +81,25 @@ func (s *EmbeddingService) ProcessJournal(ctx context.Context, journalID string)
 		return fmt.Errorf("%w: embedding provider is not configured", ai.ErrInvalidRequest)
 	}
 
+	started := time.Now()
 	response, err := s.embeddings.Embed(ctx, ai.EmbeddingRequest{
 		Model: s.model,
 		Texts: chunkTexts(chunks),
 	})
+	latency := time.Since(started)
 	if err != nil {
+		if s.usage != nil {
+			s.usage.Record(ctx, aiusage.Event{
+				UserID:        entry.UserID,
+				Operation:     aiusage.OperationEmbedding,
+				Provider:      s.provider,
+				Model:         s.model,
+				Latency:       latency,
+				Success:       false,
+				ErrorCategory: ai.ErrorCategory(err),
+				ReferenceID:   &journalID,
+			})
+		}
 		return err
 	}
 	if len(response.Embeddings) != len(chunks) {
@@ -96,6 +117,19 @@ func (s *EmbeddingService) ProcessJournal(ctx context.Context, journalID string)
 	}
 	if model == "" {
 		model = "unknown"
+	}
+
+	if s.usage != nil {
+		s.usage.Record(ctx, aiusage.Event{
+			UserID:      entry.UserID,
+			Operation:   aiusage.OperationEmbedding,
+			Provider:    s.provider,
+			Model:       model,
+			InputTokens: response.Usage.InputTokens,
+			Latency:     latency,
+			Success:     true,
+			ReferenceID: &journalID,
+		})
 	}
 
 	if err := s.repo.ReplaceEmbeddings(ctx, journalID, entry.UserID, chunks, response.Embeddings, model); err != nil {

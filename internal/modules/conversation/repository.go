@@ -159,19 +159,20 @@ func (r *Repository) UpdateConversationTimestamp(tx *gorm.DB, conversationID str
 	).Error
 }
 
-// ProfilePreferences returns the user's language and communication style.
-func (r *Repository) ProfilePreferences(ctx context.Context, userID string) (string, string, error) {
-	var language, style string
+// ProfilePreferences returns the user's language, communication style, and
+// timezone.
+func (r *Repository) ProfilePreferences(ctx context.Context, userID string) (string, string, string, error) {
+	var language, style, timezone string
 	err := r.db.WithContext(ctx).Raw(
-		`SELECT language, communication_style FROM profiles WHERE user_id = ?`, userID,
-	).Row().Scan(&language, &style)
+		`SELECT language, communication_style, timezone FROM profiles WHERE user_id = ?`, userID,
+	).Row().Scan(&language, &style, &timezone)
 	if errors.Is(err, sql.ErrNoRows) {
-		return "id", "adaptive", nil
+		return "id", "adaptive", "Asia/Jakarta", nil
 	}
 	if err != nil {
-		return "", "", fmt.Errorf("load profile preferences: %w", err)
+		return "", "", "", fmt.Errorf("load profile preferences: %w", err)
 	}
-	return language, style, nil
+	return language, style, timezone, nil
 }
 
 // ClaimIdempotency inserts the key when unused.

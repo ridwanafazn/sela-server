@@ -549,22 +549,22 @@ Do not record full private prompts or journal content in ordinary logs.
 - [ ] Provider adapters implemented.
 - [ ] Timeouts configured.
 - [ ] Retry policy implemented.
-- [ ] Usage metadata persisted.
-- [ ] Context retrieval implemented.
-- [ ] Ownership filters enforced.
-- [ ] Memory schema validated.
-- [ ] Insight evidence validated.
-- [ ] Prompt versions tracked.
-- [ ] Evaluation tests established.
-- [ ] Sensitive logging reviewed.
-- [ ] Vertex AI adapter implemented behind the provider interface.
-- [ ] 768-dimensional embedding column and model configured.
-- [ ] Offsets and content hash stored instead of chunk text.
-- [ ] Async insight job and status endpoint implemented.
-- [ ] Insight evidence threshold enforced.
+- [x] Usage metadata persisted.
+- [x] Context retrieval implemented.
+- [x] Ownership filters enforced.
+- [x] Memory schema validated.
+- [x] Insight evidence validated.
+- [x] Prompt versions tracked.
+- [x] Evaluation tests established.
+- [x] Sensitive logging reviewed.
+- [x] Vertex AI adapter implemented behind the provider interface.
+- [x] 768-dimensional embedding column and model configured.
+- [x] Offsets and content hash stored instead of chunk text.
+- [x] Async insight job and status endpoint implemented.
+- [x] Insight evidence threshold enforced.
 - [ ] Safety escalation and locale resources reviewed.
-- [ ] Per-user and global cost limits configured.
-- [ ] Prompt injection test set passing.
+- [x] Per-user and global cost limits configured.
+- [x] Prompt injection test set passing.
 
 ## 18. Retrieval Scoring and Context Selection
 

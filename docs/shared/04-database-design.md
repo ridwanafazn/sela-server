@@ -342,6 +342,32 @@ Rules:
 - The latest feedback is returned in the insight response.
 - Feedback does not modify the AI-generated insight content.
 
+### ai_usage_events
+
+Stores operational AI metadata for cost, latency, and error tracking.
+
+Fields:
+
+- id.
+- user_id.
+- operation: `companion`, `memory.extraction.journal`, `memory.extraction.message`, `insight.generate`, `embedding.journal`.
+- provider.
+- model.
+- input_tokens, output_tokens.
+- estimated_cost_usd.
+- latency_ms.
+- success.
+- error_category, nullable.
+- reference_id, nullable.
+- created_at.
+
+Rules:
+
+- Never store prompts, source text, or generated content.
+- Tokens, cost, and latency must be non-negative.
+- Rows are user-owned and cascade on account deletion.
+- Monthly budgets are derived from these events.
+
 ### scheduled_jobs
 
 Stores durable asynchronous tasks.
@@ -459,6 +485,9 @@ Recommended indexes:
 - `insight_evidence(insight_id)`.
 - `insight_feedback(insight_id, created_at)`.
 - `scheduled_jobs(status, run_at)` partial index for claimable jobs.
+- `ai_usage_events(user_id, created_at DESC)`.
+- `ai_usage_events(operation, created_at DESC)`.
+- `ai_usage_events(reference_id)` partial when present.
 - `idempotency_keys(user_id, endpoint, key)` unique.
 - `idempotency_keys(expires_at)`.
 
@@ -555,6 +584,7 @@ Account deletion must cover:
 - Sessions.
 - Idempotency records.
 - User-owned jobs.
+- AI usage events.
 
 Deletion behavior:
 

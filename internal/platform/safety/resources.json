@@ -1,0 +1,67 @@
+{
+  "version": "2026-11-15",
+  "locales": {
+    "id-ID": {
+      "language": "id",
+      "emergency": "112 atau 119",
+      "reviewed": false,
+      "notes": "Verify resources with the Indonesian Ministry of Health or a local clinical reviewer before production.",
+      "resources": [
+        {
+          "name": "SEJIWA Kementerian Kesehatan",
+          "contact": "119 ekstensi 8",
+          "description": "Layanan konseling kesehatan jiwa."
+        },
+        {
+          "name": "Into The Light Indonesia",
+          "contact": "https://www.intothelightid.org",
+          "description": "Dukungan pencegahan bunuh diri dan kesehatan jiwa."
+        }
+      ]
+    },
+    "en-US": {
+      "language": "en",
+      "emergency": "911",
+      "reviewed": false,
+      "notes": "Verify against the current 988 Lifeline directory before production.",
+      "resources": [
+        {
+          "name": "988 Suicide & Crisis Lifeline",
+          "contact": "call or text 988",
+          "description": "Free, confidential crisis support in the United States."
+        }
+      ]
+    },
+    "en": {
+      "language": "en",
+      "emergency": "your local emergency number",
+      "reviewed": false,
+      "notes": "Use only with a locale-specific resource list reviewed for the deployment region.",
+      "resources": [
+        {
+          "name": "Find A Helpline",
+          "contact": "https://findahelpline.com",
+          "description": "Directory of vetted crisis lines by country."
+        }
+      ]
+    },
+    "default": {
+      "language": "en",
+      "emergency": "your local emergency number",
+      "reviewed": false,
+      "notes": "Fallback resources only. Configure and review locale-specific resources before production.",
+      "resources": [
+        {
+          "name": "Find A Helpline",
+          "contact": "https://findahelpline.com",
+          "description": "Directory of vetted crisis lines by country."
+        },
+        {
+          "name": "Local emergency services",
+          "contact": "your local emergency number",
+          "description": "Call if there is immediate danger."
+        }
+      ]
+    }
+  }
+}

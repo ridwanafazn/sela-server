@@ -23,9 +23,11 @@ import (
 	"github.com/ridwanafazn/sela-server/internal/modules/journal"
 	"github.com/ridwanafazn/sela-server/internal/modules/memory"
 	"github.com/ridwanafazn/sela-server/internal/modules/user"
+	"github.com/ridwanafazn/sela-server/internal/platform/aiusage"
 	"github.com/ridwanafazn/sela-server/internal/platform/database"
 	"github.com/ridwanafazn/sela-server/internal/platform/httpx"
 	"github.com/ridwanafazn/sela-server/internal/platform/ratelimit"
+	"github.com/ridwanafazn/sela-server/internal/platform/safety"
 	"github.com/ridwanafazn/sela-server/migrations"
 )
 
@@ -45,6 +47,26 @@ func BuildRouter(cfg *config.Config, log *slog.Logger, db *database.DB) (*gin.En
 	}
 
 	readiness := database.NewReadiness(db, expectedVersion, cfg.Health.Timeout)
+	safetyService, err := safety.NewService(cfg.Safety.ResourcesFile)
+	if err != nil {
+		return nil, fmt.Errorf("load safety resources: %w", err)
+	}
+	if unreviewed := safetyService.UnreviewedLocales(); len(unreviewed) > 0 {
+		log.Warn("safety resources require local review", slog.Any("locales", unreviewed))
+	}
+	usageService := aiusage.NewService(
+		db.Gorm,
+		aiusage.Prices{
+			InputPerMillion:     cfg.AI.InputCostPerMillion,
+			OutputPerMillion:    cfg.AI.OutputCostPerMillion,
+			EmbeddingPerMillion: cfg.AI.EmbeddingCostPerMillion,
+		},
+		aiusage.Budgets{
+			UserMonthlyUSD:   cfg.AI.UserMonthlyBudgetUSD,
+			GlobalMonthlyUSD: cfg.AI.GlobalMonthlyBudgetUSD,
+		},
+		log,
+	)
 
 	authRepo := auth.NewRepository(db.Gorm)
 	tokens := auth.NewTokenManager(cfg.JWT.AccessSecret, cfg.JWT.Issuer, cfg.JWT.Audience, cfg.JWT.AccessTTL)
@@ -109,6 +131,7 @@ func BuildRouter(cfg *config.Config, log *slog.Logger, db *database.DB) (*gin.En
 		insight.NewRepository(db.Gorm),
 		queue,
 		limiter,
+		usageService,
 		insight.Limits{
 			PerHour: cfg.RateLimit.InsightPerHour,
 			PerDay:  cfg.RateLimit.InsightPerDay,
@@ -122,6 +145,9 @@ func BuildRouter(cfg *config.Config, log *slog.Logger, db *database.DB) (*gin.En
 		retrieval,
 		memoryService,
 		queue,
+		safetyService,
+		usageService,
+		cfg.AI.Provider,
 		llm,
 		limiter,
 		conversation.Limits{CompanionPerMinute: cfg.RateLimit.CompanionPerMinute},

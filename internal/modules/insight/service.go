@@ -14,6 +14,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/ridwanafazn/sela-server/internal/modules/job"
+	"github.com/ridwanafazn/sela-server/internal/platform/aiusage"
 	"github.com/ridwanafazn/sela-server/internal/platform/ratelimit"
 	"github.com/ridwanafazn/sela-server/internal/shared/apierrors"
 	"github.com/ridwanafazn/sela-server/internal/shared/ids"
@@ -39,6 +40,7 @@ type Service struct {
 	repo    *Repository
 	queue   *job.Queue
 	limiter *ratelimit.Limiter
+	usage   *aiusage.Service
 	limits  Limits
 	log     *slog.Logger
 	now     func() time.Time
@@ -49,6 +51,7 @@ func NewService(
 	repo *Repository,
 	queue *job.Queue,
 	limiter *ratelimit.Limiter,
+	usage *aiusage.Service,
 	limits Limits,
 	log *slog.Logger,
 ) *Service {
@@ -59,6 +62,7 @@ func NewService(
 		repo:    repo,
 		queue:   queue,
 		limiter: limiter,
+		usage:   usage,
 		limits:  limits,
 		log:     log,
 		now:     time.Now,
@@ -117,6 +121,15 @@ func (s *Service) Request(
 
 	if err := s.enforceRateLimit(ctx, userID); err != nil {
 		return nil, err
+	}
+	if s.usage != nil {
+		exhausted, err := s.usage.Exhausted(ctx, userID)
+		if err != nil {
+			s.log.WarnContext(ctx, "insight budget check failed", slog.String("error", err.Error()))
+		} else if exhausted {
+			s.log.WarnContext(ctx, "insight request blocked by ai budget", slog.String("user_id", userID))
+			return nil, apierrors.RateLimited(24 * time.Hour)
+		}
 	}
 
 	jobID, created, err := s.queue.EnqueueIdempotent(ctx, &job.Job{

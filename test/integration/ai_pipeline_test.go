@@ -71,7 +71,7 @@ func TestEmbeddingPipelineAndHybridRetrieval(t *testing.T) {
 
 	repo := journal.NewRepository(db.Gorm)
 	embeddings := ai.NewFakeEmbedding(768)
-	embeddingService := journal.NewEmbeddingService(repo, embeddings, "fake-embedding-768", 768, testLogger())
+	embeddingService := journal.NewEmbeddingService(repo, embeddings, "fake-embedding-768", "fake", 768, nil, testLogger())
 
 	queue := job.NewQueue(db.Gorm)
 	worker := job.NewWorker(queue, map[string]job.Handler{
@@ -247,7 +247,7 @@ func TestVectorCandidatesFilterByEmbeddingModel(t *testing.T) {
 	})
 
 	repo := journal.NewRepository(db.Gorm)
-	embeddingService := journal.NewEmbeddingService(repo, ai.NewFakeEmbedding(768), "fake-embedding-768", 768, testLogger())
+	embeddingService := journal.NewEmbeddingService(repo, ai.NewFakeEmbedding(768), "fake-embedding-768", "fake", 768, nil, testLogger())
 	if err := embeddingService.ProcessJournal(ctx, entry.ID); err != nil {
 		t.Fatalf("process journal: %v", err)
 	}

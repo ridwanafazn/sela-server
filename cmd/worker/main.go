@@ -20,6 +20,7 @@ import (
 	"github.com/ridwanafazn/sela-server/internal/modules/job"
 	"github.com/ridwanafazn/sela-server/internal/modules/journal"
 	"github.com/ridwanafazn/sela-server/internal/modules/memory"
+	"github.com/ridwanafazn/sela-server/internal/platform/aiusage"
 	"github.com/ridwanafazn/sela-server/internal/platform/database"
 	"github.com/ridwanafazn/sela-server/internal/platform/logger"
 	"github.com/ridwanafazn/sela-server/prompts"
@@ -61,6 +62,20 @@ func run() error {
 		return runBackfill(ctx, cfg, db, log)
 	}
 
+	usageService := aiusage.NewService(
+		db.Gorm,
+		aiusage.Prices{
+			InputPerMillion:     cfg.AI.InputCostPerMillion,
+			OutputPerMillion:    cfg.AI.OutputCostPerMillion,
+			EmbeddingPerMillion: cfg.AI.EmbeddingCostPerMillion,
+		},
+		aiusage.Budgets{
+			UserMonthlyUSD:   cfg.AI.UserMonthlyBudgetUSD,
+			GlobalMonthlyUSD: cfg.AI.GlobalMonthlyBudgetUSD,
+		},
+		log,
+	)
+
 	embeddings, err := ai.NewEmbedding(ctx, cfg.AI)
 	if err != nil {
 		return err
@@ -76,19 +91,25 @@ func run() error {
 		journal.NewRepository(db.Gorm),
 		embeddings,
 		embeddingModel,
+		cfg.AI.EmbeddingProvider,
 		cfg.AI.EmbeddingDimension,
+		usageService,
 		log,
 	)
 	extractionService := memory.NewExtractionService(
 		memory.NewRepository(db.Gorm),
 		llm,
 		cfg.AI.Model,
+		cfg.AI.Provider,
+		usageService,
 		log,
 	)
 	insightGeneration := insight.NewGenerationService(
 		insight.NewRepository(db.Gorm),
 		llm,
 		cfg.AI.Model,
+		cfg.AI.Provider,
+		usageService,
 		log,
 	)
 	accountRepository := account.NewRepository(db.Gorm)

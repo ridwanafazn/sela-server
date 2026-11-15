@@ -171,6 +171,19 @@ func TestCompanionFlow(t *testing.T) {
 		t.Error("assistant metadata is empty")
 	}
 
+	var usageCount, inputTokens, outputTokens int
+	if err := db.SQL.QueryRowContext(t.Context(),
+		`SELECT count(*), COALESCE(max(input_tokens), 0), COALESCE(max(output_tokens), 0)
+		 FROM ai_usage_events
+		 WHERE user_id = $1 AND operation = 'companion' AND success = true`,
+		user.User.ID,
+	).Scan(&usageCount, &inputTokens, &outputTokens); err != nil {
+		t.Fatalf("load companion usage: %v", err)
+	}
+	if usageCount != 1 || inputTokens == 0 || outputTokens == 0 {
+		t.Errorf("companion usage = (count %d, input %d, output %d)", usageCount, inputTokens, outputTokens)
+	}
+
 	deleted := do(t, router, http.MethodDelete, "/api/v1/conversations/"+created.ID, requestOptions{token: user.AccessToken})
 	if deleted.Status != http.StatusNoContent {
 		t.Fatalf("delete conversation = %d: %s", deleted.Status, deleted.Body)
@@ -265,6 +278,29 @@ func TestCompanionMessagePagination(t *testing.T) {
 	pageTwo := decodeJSON[messageListEnvelope](t, secondPage.Body)
 	if len(pageTwo.Data) != 2 {
 		t.Errorf("second page size = %d, want 2", len(pageTwo.Data))
+	}
+}
+
+func TestCompanionAIBudgetExhaustion(t *testing.T) {
+	cfg := testConfig()
+	cfg.AI.UserMonthlyBudgetUSD = 0.000001
+	cfg.AI.InputCostPerMillion = 1000
+	cfg.AI.OutputCostPerMillion = 1000
+	router, _ := newAPI(t, cfg)
+	user := newTestUser(t, router)
+	conversation := mustCreateConversation(t, router, user.AccessToken, "Budget")
+
+	first := sendMessageAPI(t, router, user.AccessToken, conversation.ID, uuid.NewString(), "First message.")
+	if first.Status != http.StatusOK {
+		t.Fatalf("first message = %d: %s", first.Status, first.Body)
+	}
+
+	second := sendMessageAPI(t, router, user.AccessToken, conversation.ID, uuid.NewString(), "Second message.")
+	if second.Status != http.StatusTooManyRequests {
+		t.Fatalf("second message = %d, want 429: %s", second.Status, second.Body)
+	}
+	if second.Header.Get("Retry-After") == "" {
+		t.Error("budget 429 response is missing Retry-After")
 	}
 }
 

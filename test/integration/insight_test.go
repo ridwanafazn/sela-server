@@ -16,6 +16,7 @@ import (
 	"github.com/ridwanafazn/sela-server/internal/modules/ai"
 	"github.com/ridwanafazn/sela-server/internal/modules/insight"
 	"github.com/ridwanafazn/sela-server/internal/modules/job"
+	"github.com/ridwanafazn/sela-server/internal/platform/aiusage"
 	"github.com/ridwanafazn/sela-server/internal/platform/database"
 )
 
@@ -229,7 +230,13 @@ func TestInsightGenerationAndFeedbackFlow(t *testing.T) {
 	}
 
 	fake := &ai.FakeLLM{StructuredReply: insightReply([]string{first.ID, second.ID}, 0.72)}
-	generation := insight.NewGenerationService(insight.NewRepository(db.Gorm), fake, "fake-chat", testLogger())
+	usage := aiusage.NewService(
+		db.Gorm,
+		aiusage.Prices{InputPerMillion: 2, OutputPerMillion: 8},
+		aiusage.Budgets{},
+		testLogger(),
+	)
+	generation := insight.NewGenerationService(insight.NewRepository(db.Gorm), fake, "fake-chat", "fake", usage, testLogger())
 	processAllJobs(t, newInsightWorker(db, generation))
 
 	completed := decodeJSON[insightJobEnvelope](t, do(t, router, http.MethodGet,
@@ -239,6 +246,19 @@ func TestInsightGenerationAndFeedbackFlow(t *testing.T) {
 	}
 	if completed.InsightID == nil {
 		t.Fatal("completed job is missing insight_id")
+	}
+
+	var usageCount, referenceMatches int
+	if err := db.SQL.QueryRowContext(t.Context(),
+		`SELECT count(*), count(*) FILTER (WHERE reference_id = $2)
+		 FROM ai_usage_events
+		 WHERE user_id = $1 AND operation = 'insight.generate' AND success = true`,
+		user.User.ID, *completed.InsightID,
+	).Scan(&usageCount, &referenceMatches); err != nil {
+		t.Fatalf("load insight usage: %v", err)
+	}
+	if usageCount != 1 || referenceMatches != 1 {
+		t.Errorf("insight usage = (count %d, reference %d)", usageCount, referenceMatches)
 	}
 
 	detail := decodeJSON[insightEnvelope](t, do(t, router, http.MethodGet,
@@ -359,7 +379,7 @@ func TestInsightInsufficientEvidence(t *testing.T) {
 	jobID := decodeJSON[insightAcceptedEnvelope](t, accepted.Body).Data.JobID
 
 	fake := &ai.FakeLLM{StructuredReply: insightReply([]string{uuid.NewString(), uuid.NewString()}, 0.8)}
-	generation := insight.NewGenerationService(insight.NewRepository(db.Gorm), fake, "fake-chat", testLogger())
+	generation := insight.NewGenerationService(insight.NewRepository(db.Gorm), fake, "fake-chat", "fake", nil, testLogger())
 	processAllJobs(t, newInsightWorker(db, generation))
 
 	jobView := decodeJSON[insightJobEnvelope](t, do(t, router, http.MethodGet,
@@ -402,7 +422,7 @@ func TestInsightLowConfidenceIsInsufficient(t *testing.T) {
 	jobID := decodeJSON[insightAcceptedEnvelope](t, accepted.Body).Data.JobID
 
 	fake := &ai.FakeLLM{StructuredReply: insightReply([]string{first.ID, second.ID}, 0.2)}
-	generation := insight.NewGenerationService(insight.NewRepository(db.Gorm), fake, "fake-chat", testLogger())
+	generation := insight.NewGenerationService(insight.NewRepository(db.Gorm), fake, "fake-chat", "fake", nil, testLogger())
 	processAllJobs(t, newInsightWorker(db, generation))
 
 	jobView := decodeJSON[insightJobEnvelope](t, do(t, router, http.MethodGet,
@@ -433,7 +453,7 @@ func TestInsightInventedEvidenceFailsJob(t *testing.T) {
 	jobID := decodeJSON[insightAcceptedEnvelope](t, accepted.Body).Data.JobID
 
 	fake := &ai.FakeLLM{StructuredReply: insightReply([]string{uuid.NewString(), uuid.NewString()}, 0.8)}
-	generation := insight.NewGenerationService(insight.NewRepository(db.Gorm), fake, "fake-chat", testLogger())
+	generation := insight.NewGenerationService(insight.NewRepository(db.Gorm), fake, "fake-chat", "fake", nil, testLogger())
 	processAllJobs(t, newInsightWorker(db, generation))
 
 	jobView := decodeJSON[insightJobEnvelope](t, do(t, router, http.MethodGet,

@@ -16,7 +16,9 @@ import (
 	"github.com/ridwanafazn/sela-server/internal/modules/ai"
 	"github.com/ridwanafazn/sela-server/internal/modules/journal"
 	"github.com/ridwanafazn/sela-server/internal/modules/memory"
+	"github.com/ridwanafazn/sela-server/internal/platform/aiusage"
 	"github.com/ridwanafazn/sela-server/internal/platform/ratelimit"
+	"github.com/ridwanafazn/sela-server/internal/platform/safety"
 	"github.com/ridwanafazn/sela-server/internal/shared/apierrors"
 	"github.com/ridwanafazn/sela-server/internal/shared/ids"
 	"github.com/ridwanafazn/sela-server/prompts"
@@ -45,6 +47,9 @@ type Service struct {
 	retrieval *journal.RetrievalService
 	memories  MemoryRetriever
 	jobs      JobEnqueuer
+	safety    *safety.Service
+	usage     *aiusage.Service
+	provider  string
 	llm       ai.LLMProvider
 	limiter   *ratelimit.Limiter
 	limits    Limits
@@ -70,6 +75,9 @@ func NewService(
 	retrieval *journal.RetrievalService,
 	memories MemoryRetriever,
 	jobs JobEnqueuer,
+	safetyService *safety.Service,
+	usage *aiusage.Service,
+	provider string,
 	llm ai.LLMProvider,
 	limiter *ratelimit.Limiter,
 	limits Limits,
@@ -84,6 +92,9 @@ func NewService(
 		retrieval: retrieval,
 		memories:  memories,
 		jobs:      jobs,
+		safety:    safetyService,
+		usage:     usage,
+		provider:  provider,
 		llm:       llm,
 		limiter:   limiter,
 		limits:    limits,
@@ -381,9 +392,38 @@ func (s *Service) SendMessage(ctx context.Context, userID, conversationID, idemp
 	}
 	reverseMessages(recent)
 
-	language, style, err := s.repo.ProfilePreferences(ctx, userID)
+	language, style, timezone, err := s.repo.ProfilePreferences(ctx, userID)
 	if err != nil {
 		return nil, err
+	}
+
+	assessment := safety.Assessment{Level: safety.LevelNone}
+	if s.safety != nil {
+		assessment = safety.Assess(content)
+	}
+	if assessment.Level == safety.LevelCrisis {
+		return s.sendSafetyResponse(ctx, userID, conversationID, record, persistedUser, language, timezone, assessment)
+	}
+
+	safetyNote := ""
+	if assessment.Level == safety.LevelElevated {
+		safetyNote = s.safety.ElevatedInstruction(language, timezone, assessment.Category)
+	}
+
+	if s.usage != nil {
+		exhausted, err := s.usage.Exhausted(ctx, userID)
+		if err != nil {
+			s.log.WarnContext(ctx, "ai budget check failed",
+				slog.String("conversation_id", conversationID),
+				slog.String("error", err.Error()),
+			)
+		} else if exhausted {
+			s.log.WarnContext(ctx, "companion blocked by ai budget",
+				slog.String("conversation_id", conversationID),
+				slog.String("user_id", userID),
+			)
+			return nil, apierrors.RateLimited(24 * time.Hour)
+		}
 	}
 
 	retrieved, err := s.retrieval.Retrieve(ctx, userID, content, 8)
@@ -404,7 +444,7 @@ func (s *Service) SendMessage(ctx context.Context, userID, conversationID, idemp
 		memoriesUsed = nil
 	}
 
-	systemPrompt, err := BuildSystemPrompt(language, style, retrieved, memoriesUsed)
+	systemPrompt, err := BuildSystemPrompt(language, style, retrieved, memoriesUsed, safetyNote)
 	if err != nil {
 		return nil, err
 	}
@@ -414,6 +454,7 @@ func (s *Service) SendMessage(ctx context.Context, userID, conversationID, idemp
 		history = []ai.Message{{Role: ai.RoleUser, Content: content}}
 	}
 
+	started := time.Now()
 	response, err := s.llm.Generate(ctx, ai.GenerateRequest{
 		Model:       s.model,
 		System:      systemPrompt,
@@ -422,13 +463,45 @@ func (s *Service) SendMessage(ctx context.Context, userID, conversationID, idemp
 		MaxTokens:   maxOutputTokens,
 		SessionID:   conversationID,
 	})
+	latency := time.Since(started)
+	referenceID := conversationID
 	if err != nil {
+		if s.usage != nil {
+			s.usage.Record(ctx, aiusage.Event{
+				UserID:        userID,
+				Operation:     aiusage.OperationCompanion,
+				Provider:      s.provider,
+				Model:         s.model,
+				Latency:       latency,
+				Success:       false,
+				ErrorCategory: ai.ErrorCategory(err),
+				ReferenceID:   &referenceID,
+			})
+		}
 		_ = s.repo.DeleteIdempotency(ctx, record.ID)
 		s.log.WarnContext(ctx, "companion generation failed",
 			slog.String("conversation_id", conversationID),
 			slog.String("error", err.Error()),
 		)
 		return nil, upstreamError(err)
+	}
+	if s.usage != nil {
+		s.usage.Record(ctx, aiusage.Event{
+			UserID:       userID,
+			Operation:    aiusage.OperationCompanion,
+			Provider:     s.provider,
+			Model:        response.Model,
+			InputTokens:  response.Usage.InputTokens,
+			OutputTokens: response.Usage.OutputTokens,
+			Latency:      latency,
+			Success:      true,
+			ReferenceID:  &referenceID,
+		})
+	}
+
+	assistantContent := response.Content
+	if assessment.Level == safety.LevelElevated {
+		assistantContent = s.safety.EnsureElevatedFooter(assistantContent, language, timezone)
 	}
 
 	assistantID, err := ids.New()
@@ -437,14 +510,19 @@ func (s *Service) SendMessage(ctx context.Context, userID, conversationID, idemp
 	}
 	assistantTime := s.now().UTC()
 
-	metadata, err := json.Marshal(map[string]any{
+	metadataValues := map[string]any{
 		"model":          response.Model,
 		"prompt_version": prompts.CompanionVersion,
 		"input_tokens":   response.Usage.InputTokens,
 		"output_tokens":  response.Usage.OutputTokens,
 		"journals_used":  len(retrieved),
 		"memories_used":  len(memoriesUsed),
-	})
+	}
+	if assessment.Level != safety.LevelNone {
+		metadataValues["safety_level"] = assessment.Level
+		metadataValues["safety_category"] = assessment.Category
+	}
+	metadata, err := json.Marshal(metadataValues)
 	if err != nil {
 		return nil, err
 	}
@@ -454,7 +532,7 @@ func (s *Service) SendMessage(ctx context.Context, userID, conversationID, idemp
 		ConversationID: conversationID,
 		UserID:         userID,
 		Role:           RoleAssistant,
-		Content:        response.Content,
+		Content:        assistantContent,
 		Metadata:       metadata,
 		CreatedAt:      assistantTime,
 	}
@@ -478,7 +556,7 @@ func (s *Service) SendMessage(ctx context.Context, userID, conversationID, idemp
 		if err := s.repo.CompleteIdempotency(tx, record.ID, 200, body); err != nil {
 			return err
 		}
-		if s.jobs == nil {
+		if s.jobs == nil || assessment.Level != safety.LevelNone {
 			return nil
 		}
 		return s.jobs.EnqueueMessageMemoryExtraction(
@@ -501,6 +579,75 @@ func (s *Service) SendMessage(ctx context.Context, userID, conversationID, idemp
 		slog.String("model", response.Model),
 		slog.Int("input_tokens", response.Usage.InputTokens),
 		slog.Int("output_tokens", response.Usage.OutputTokens),
+	)
+
+	return payload, nil
+}
+
+func (s *Service) sendSafetyResponse(
+	ctx context.Context,
+	userID, conversationID string,
+	record *IdempotencyRecord,
+	persistedUser *Message,
+	language, timezone string,
+	assessment safety.Assessment,
+) (*SendPayload, error) {
+	assistantID, err := ids.New()
+	if err != nil {
+		return nil, err
+	}
+	assistantTime := s.now().UTC()
+	content := s.safety.EscalationMessage(language, timezone)
+
+	metadata, err := json.Marshal(map[string]any{
+		"model":           "safety/escalation",
+		"prompt_version":  "safety/v1",
+		"safety_level":    assessment.Level,
+		"safety_category": assessment.Category,
+		"input_tokens":    0,
+		"output_tokens":   0,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	assistant := &Message{
+		ID:             assistantID,
+		ConversationID: conversationID,
+		UserID:         userID,
+		Role:           RoleAssistant,
+		Content:        content,
+		Metadata:       metadata,
+		CreatedAt:      assistantTime,
+	}
+	payload := &SendPayload{
+		UserMessage:      newMessageView(persistedUser),
+		AssistantMessage: newMessageView(assistant),
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+
+	err = s.repo.Transaction(ctx, func(tx *gorm.DB) error {
+		if _, err := s.repo.CreateMessageTx(tx, assistant); err != nil {
+			return err
+		}
+		if err := s.repo.UpdateConversationTimestamp(tx, conversationID, assistantTime); err != nil {
+			return err
+		}
+		return s.repo.CompleteIdempotency(tx, record.ID, 200, body)
+	})
+	if err != nil {
+		_ = s.repo.DeleteIdempotency(ctx, record.ID)
+		return nil, err
+	}
+
+	s.log.InfoContext(ctx, "companion safety escalation",
+		slog.String("conversation_id", conversationID),
+		slog.String("user_id", userID),
+		slog.String("safety_level", string(assessment.Level)),
+		slog.String("safety_category", assessment.Category),
 	)
 
 	return payload, nil

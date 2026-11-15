@@ -6,7 +6,7 @@ IMAGE   ?= sela-server:local
 
 .PHONY: help tidy fmt fmt-check vet test test-race test-integration build run \
 	migrate-up migrate-down migrate-down-all migrate-version \
-	compose-up compose-down compose-reset check docker-build worker worker-once backfill
+	compose-up compose-down compose-reset check docker-build worker worker-once backfill eval
 
 help:
 	@echo "SELA backend"
@@ -23,6 +23,7 @@ help:
 	@echo "  make worker              Run the background worker"
 	@echo "  make worker-once         Process available jobs once and exit"
 	@echo "  make backfill            Re-enqueue embeddings and memory extraction for active journals"
+	@echo "  make eval                Run deterministic safety and prompt-injection quality gates"
 	@echo "  make migrate-up          Apply all migrations"
 	@echo "  make migrate-down        Roll back one migration"
 	@echo "  make migrate-down-all    Roll back every migration (destructive)"
@@ -74,6 +75,9 @@ worker-once:
 
 backfill:
 	$(GO) run ./cmd/worker -backfill
+
+eval:
+	$(GO) test -count=1 -v ./internal/evaluation
 
 migrate-up:
 	$(GO) run ./cmd/migrate up

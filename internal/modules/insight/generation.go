@@ -15,6 +15,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/ridwanafazn/sela-server/internal/modules/ai"
+	"github.com/ridwanafazn/sela-server/internal/platform/aiusage"
 	"github.com/ridwanafazn/sela-server/internal/shared/ids"
 	"github.com/ridwanafazn/sela-server/prompts"
 )
@@ -89,19 +90,35 @@ type outputEvidence struct {
 
 // GenerationService produces insights from eligible source records.
 type GenerationService struct {
-	repo  *Repository
-	llm   ai.LLMProvider
-	model string
-	log   *slog.Logger
-	now   func() time.Time
+	repo     *Repository
+	llm      ai.LLMProvider
+	model    string
+	provider string
+	usage    *aiusage.Service
+	log      *slog.Logger
+	now      func() time.Time
 }
 
 // NewGenerationService creates the insight generation pipeline.
-func NewGenerationService(repo *Repository, llm ai.LLMProvider, model string, log *slog.Logger) *GenerationService {
+func NewGenerationService(
+	repo *Repository,
+	llm ai.LLMProvider,
+	model, provider string,
+	usage *aiusage.Service,
+	log *slog.Logger,
+) *GenerationService {
 	if log == nil {
 		log = slog.Default()
 	}
-	return &GenerationService{repo: repo, llm: llm, model: model, log: log, now: time.Now}
+	return &GenerationService{
+		repo:     repo,
+		llm:      llm,
+		model:    model,
+		provider: provider,
+		usage:    usage,
+		log:      log,
+		now:      time.Now,
+	}
 }
 
 // Process generates one insight or records why there was not enough
@@ -189,6 +206,7 @@ func (s *GenerationService) Process(
 		return nil, fmt.Errorf("render insight prompt: %w", err)
 	}
 
+	started := time.Now()
 	response, err := s.llm.Generate(ctx, ai.GenerateRequest{
 		Model:          s.model,
 		System:         prompt.String(),
@@ -198,19 +216,69 @@ func (s *GenerationService) Process(
 		ResponseSchema: insightSchema,
 		SessionID:      "insight:" + jobID,
 	})
+	latency := time.Since(started)
 	if err != nil {
+		if s.usage != nil {
+			s.usage.Record(ctx, aiusage.Event{
+				UserID:        userID,
+				Operation:     aiusage.OperationInsight,
+				Provider:      s.provider,
+				Model:         s.model,
+				Latency:       latency,
+				Success:       false,
+				ErrorCategory: ai.ErrorCategory(err),
+			})
+		}
 		return nil, err
 	}
 
 	output, err := parseInsightResponse(response.Content)
 	if err != nil {
+		if s.usage != nil {
+			s.usage.Record(ctx, aiusage.Event{
+				UserID:        userID,
+				Operation:     aiusage.OperationInsight,
+				Provider:      s.provider,
+				Model:         response.Model,
+				InputTokens:   response.Usage.InputTokens,
+				OutputTokens:  response.Usage.OutputTokens,
+				Latency:       latency,
+				Success:       false,
+				ErrorCategory: ai.ErrorCategory(err),
+			})
+		}
 		return nil, err
 	}
 	validated, reason, err := validateInsightOutput(output, sources, included)
 	if err != nil {
+		if s.usage != nil {
+			s.usage.Record(ctx, aiusage.Event{
+				UserID:        userID,
+				Operation:     aiusage.OperationInsight,
+				Provider:      s.provider,
+				Model:         response.Model,
+				InputTokens:   response.Usage.InputTokens,
+				OutputTokens:  response.Usage.OutputTokens,
+				Latency:       latency,
+				Success:       false,
+				ErrorCategory: ai.ErrorCategory(err),
+			})
+		}
 		return nil, err
 	}
 	if reason != "" {
+		if s.usage != nil {
+			s.usage.Record(ctx, aiusage.Event{
+				UserID:       userID,
+				Operation:    aiusage.OperationInsight,
+				Provider:     s.provider,
+				Model:        response.Model,
+				InputTokens:  response.Usage.InputTokens,
+				OutputTokens: response.Usage.OutputTokens,
+				Latency:      latency,
+				Success:      true,
+			})
+		}
 		result := insufficientResult(reason)
 		s.log.InfoContext(ctx, "insight generation below evidence threshold",
 			slog.String("job_id", jobID),
@@ -288,7 +356,34 @@ func (s *GenerationService) Process(
 		if err != nil {
 			return nil, err
 		}
+		if s.usage != nil {
+			s.usage.Record(ctx, aiusage.Event{
+				UserID:       userID,
+				Operation:    aiusage.OperationInsight,
+				Provider:     s.provider,
+				Model:        response.Model,
+				InputTokens:  response.Usage.InputTokens,
+				OutputTokens: response.Usage.OutputTokens,
+				Latency:      latency,
+				Success:      true,
+				ReferenceID:  &existing.ID,
+			})
+		}
 		return insightResult(existing.ID), nil
+	}
+
+	if s.usage != nil {
+		s.usage.Record(ctx, aiusage.Event{
+			UserID:       userID,
+			Operation:    aiusage.OperationInsight,
+			Provider:     s.provider,
+			Model:        response.Model,
+			InputTokens:  response.Usage.InputTokens,
+			OutputTokens: response.Usage.OutputTokens,
+			Latency:      latency,
+			Success:      true,
+			ReferenceID:  &insightID,
+		})
 	}
 
 	s.log.InfoContext(ctx, "insight generated",

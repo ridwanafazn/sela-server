@@ -83,3 +83,27 @@ var (
 func Retryable(err error) bool {
 	return errors.Is(err, ErrRateLimited) || errors.Is(err, ErrUnavailable) || errors.Is(err, ErrTimeout)
 }
+
+// ErrorCategory returns a stable, non-sensitive label for usage records.
+func ErrorCategory(err error) string {
+	switch {
+	case err == nil:
+		return ""
+	case errors.Is(err, ErrAuthentication):
+		return "authentication"
+	case errors.Is(err, ErrRateLimited):
+		return "rate_limited"
+	case errors.Is(err, ErrTimeout):
+		return "timeout"
+	case errors.Is(err, ErrUnavailable):
+		return "unavailable"
+	case errors.Is(err, ErrInvalidResponse):
+		return "invalid_response"
+	case errors.Is(err, ErrDimensionMismatch):
+		return "dimension_mismatch"
+	case errors.Is(err, ErrInvalidRequest):
+		return "invalid_request"
+	default:
+		return "unknown"
+	}
+}

@@ -236,6 +236,30 @@ Table insight_feedback {
   Note: "action: confirm | correct | reject. Insight content remains immutable; feedback is an audit record."
 }
 
+Table ai_usage_events {
+  id uuid [pk]
+  user_id uuid [not null]
+  operation varchar(60) [not null]
+  provider varchar(40) [not null]
+  model varchar(100) [not null]
+  input_tokens integer [not null, default: 0]
+  output_tokens integer [not null, default: 0]
+  estimated_cost_usd decimal(12,6) [not null, default: 0]
+  latency_ms integer [not null, default: 0]
+  success boolean [not null]
+  error_category varchar(60)
+  reference_id uuid
+  created_at timestamptz [not null]
+
+  indexes {
+    (user_id, created_at)
+    (operation, created_at)
+    (reference_id)
+  }
+
+  Note: "Operational AI metadata only. Never stores prompts or private content. CHECK tokens, cost, and latency >= 0."
+}
+
 Table scheduled_jobs {
   id uuid [pk]
   user_id uuid
@@ -317,6 +341,7 @@ Ref: insight_feedback.insight_id > insights.id
 Ref: insight_feedback.user_id > users.id
 
 Ref: scheduled_jobs.user_id > users.id
+Ref: ai_usage_events.user_id > users.id
 
 Ref: idempotency_keys.user_id > users.id
 Ref: idempotency_keys.job_id > scheduled_jobs.id

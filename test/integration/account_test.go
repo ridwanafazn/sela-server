@@ -193,7 +193,7 @@ func TestAccountDeletionDeactivatesAndPurges(t *testing.T) {
 
 	processAllJobs(t, newAccountWorker(db))
 
-	var users, journals, conversations, messages, memories, sessions, jobs, idempotency int
+	var users, journals, conversations, messages, memories, sessions, jobs, idempotency, usage int
 	if err := db.SQL.QueryRowContext(ctx, `SELECT count(*) FROM users WHERE id = $1`, userID).Scan(&users); err != nil {
 		t.Fatalf("count users: %v", err)
 	}
@@ -218,9 +218,12 @@ func TestAccountDeletionDeactivatesAndPurges(t *testing.T) {
 	if err := db.SQL.QueryRowContext(ctx, `SELECT count(*) FROM idempotency_keys WHERE user_id = $1`, userID).Scan(&idempotency); err != nil {
 		t.Fatalf("count idempotency keys: %v", err)
 	}
-	if users != 0 || journals != 0 || conversations != 0 || messages != 0 || memories != 0 || sessions != 0 || jobs != 0 || idempotency != 0 {
-		t.Errorf("purged data = users:%d journals:%d conversations:%d messages:%d memories:%d sessions:%d jobs:%d idempotency:%d",
-			users, journals, conversations, messages, memories, sessions, jobs, idempotency)
+	if err := db.SQL.QueryRowContext(ctx, `SELECT count(*) FROM ai_usage_events WHERE user_id = $1`, userID).Scan(&usage); err != nil {
+		t.Fatalf("count ai usage events: %v", err)
+	}
+	if users != 0 || journals != 0 || conversations != 0 || messages != 0 || memories != 0 || sessions != 0 || jobs != 0 || idempotency != 0 || usage != 0 {
+		t.Errorf("purged data = users:%d journals:%d conversations:%d messages:%d memories:%d sessions:%d jobs:%d idempotency:%d usage:%d",
+			users, journals, conversations, messages, memories, sessions, jobs, idempotency, usage)
 	}
 
 	reRegistered := register(t, router, email, testPassword, "", "203.0.113.250")
