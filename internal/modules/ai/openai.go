@@ -101,8 +101,11 @@ func (o *OpenAI) Generate(ctx context.Context, request GenerateRequest) (*Genera
 	if err := json.Unmarshal(body, &response); err != nil {
 		return nil, fmt.Errorf("%w: decode chat response: %v", ErrInvalidResponse, err)
 	}
-	if len(response.Choices) == 0 || strings.TrimSpace(response.Choices[0].Message.Content) == "" {
+	if len(response.Choices) == 0 {
 		return nil, fmt.Errorf("%w: empty completion", ErrInvalidResponse)
+	}
+	if strings.TrimSpace(response.Choices[0].Message.Content) == "" {
+		return nil, fmt.Errorf("%w: empty completion (finish_reason=%s)", ErrInvalidResponse, response.Choices[0].FinishReason)
 	}
 
 	responseModel := response.Model

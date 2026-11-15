@@ -26,7 +26,9 @@ const (
 	idempotencyTTL        = 24 * time.Hour
 	pendingIdempotencyAge = 2 * time.Minute
 	historyTokenBudget    = 1500
-	maxOutputTokens       = 800
+	// Reasoning-capable models spend tokens on hidden reasoning before the
+	// visible answer, so the output budget must cover both.
+	maxOutputTokens       = 3000
 	conversationPageLimit = 100
 	defaultPageLimit      = 20
 	companionRateLimitKey = "companion.message"

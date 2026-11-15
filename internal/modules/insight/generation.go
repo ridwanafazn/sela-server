@@ -29,12 +29,14 @@ const (
 	maxEvidenceNoteRunes  = 300
 	minEvidenceSources    = 2
 	minInsightConfidence  = 0.40
-	insightMaxTokens      = 3000
-	insightTemperature    = 0.4
-	maxInsightTitleRunes  = 200
-	maxInsightFieldRunes  = 4000
-	maxHypothesisRunes    = 2000
-	maxQuestionRunes      = 1000
+	// Reasoning-capable models spend tokens on hidden reasoning before the
+	// JSON answer, so insight generation needs a larger output budget.
+	insightMaxTokens     = 6000
+	insightTemperature   = 0.4
+	maxInsightTitleRunes = 200
+	maxInsightFieldRunes = 4000
+	maxHypothesisRunes   = 2000
+	maxQuestionRunes     = 1000
 )
 
 var insightTemplate = template.Must(template.New("insight").Parse(prompts.InsightV1))
