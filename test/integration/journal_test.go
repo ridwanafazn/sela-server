@@ -96,6 +96,32 @@ func mustCreateJournal(t *testing.T, router *gin.Engine, token string, body map[
 	return decodeJSON[journalEnvelope](t, result.Body).Data
 }
 
+func TestJournalWriteRateLimit(t *testing.T) {
+	cfg := testConfig()
+	cfg.RateLimit.JournalPerMinute = 1
+	router, _ := newAPI(t, cfg)
+	user := newTestUser(t, router)
+
+	first := createJournalAPI(t, router, user.AccessToken, uuid.NewString(), map[string]any{
+		"content":    "First write.",
+		"entry_date": "2026-11-10",
+	})
+	if first.Status != http.StatusCreated {
+		t.Fatalf("first journal = %d: %s", first.Status, first.Body)
+	}
+
+	second := createJournalAPI(t, router, user.AccessToken, uuid.NewString(), map[string]any{
+		"content":    "Second write.",
+		"entry_date": "2026-11-11",
+	})
+	if second.Status != http.StatusTooManyRequests {
+		t.Fatalf("second journal = %d, want 429: %s", second.Status, second.Body)
+	}
+	if second.Header.Get("Retry-After") == "" {
+		t.Error("429 response is missing Retry-After")
+	}
+}
+
 func TestJournalCreateIdempotency(t *testing.T) {
 	router, _ := newAPI(t, testConfig())
 	user := newTestUser(t, router)

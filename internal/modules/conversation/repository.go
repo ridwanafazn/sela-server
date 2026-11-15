@@ -77,7 +77,21 @@ func (r *Repository) SoftDeleteConversationTx(tx *gorm.DB, userID, id string, no
 	if result.Error != nil {
 		return false, result.Error
 	}
-	return result.RowsAffected > 0, nil
+	if result.RowsAffected == 0 {
+		return false, nil
+	}
+	if err := tx.Exec(
+		`UPDATE insight_evidence e
+		 SET source_deleted_at = ?
+		 FROM messages m
+		 WHERE e.message_id = m.id
+		   AND m.conversation_id = ?
+		   AND e.source_deleted_at IS NULL`,
+		now, id,
+	).Error; err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // CreateMessageTx inserts a message inside a transaction. It reports whether

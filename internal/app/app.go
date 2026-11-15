@@ -113,7 +113,12 @@ func BuildRouter(cfg *config.Config, log *slog.Logger, db *database.DB) (*gin.En
 	accountHandler := account.NewHandler(accountService)
 
 	journalRepo := journal.NewRepository(db.Gorm)
-	journalService := journal.NewService(journalRepo, queue)
+	journalService := journal.NewService(
+		journalRepo,
+		queue,
+		limiter,
+		journal.Limits{PerMinute: cfg.RateLimit.JournalPerMinute},
+	)
 	journalHandler := journal.NewHandler(journalService)
 
 	retrieval := journal.NewRetrievalService(

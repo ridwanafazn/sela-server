@@ -98,6 +98,10 @@ paths:
                 $ref: "#/components/schemas/AuthResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
         "409":
           $ref: "#/components/responses/Conflict"
         "429":
@@ -124,6 +128,10 @@ paths:
                 $ref: "#/components/schemas/AuthResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "429":
@@ -197,6 +205,14 @@ paths:
                 $ref: "#/components/schemas/MeResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
         "401":
           $ref: "#/components/responses/Unauthorized"
     delete:
@@ -222,6 +238,10 @@ paths:
                 $ref: "#/components/schemas/DeletionResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "409":
@@ -297,10 +317,16 @@ paths:
                 $ref: "#/components/schemas/JournalResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "409":
           $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/RateLimited"
 
   /journals/{journalId}:
     parameters:
@@ -341,6 +367,10 @@ paths:
                 $ref: "#/components/schemas/JournalResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "404":
@@ -349,6 +379,8 @@ paths:
           $ref: "#/components/responses/Conflict"
         "428":
           $ref: "#/components/responses/PreconditionRequired"
+        "429":
+          $ref: "#/components/responses/RateLimited"
     delete:
       tags: [Journals]
       operationId: deleteJournal
@@ -366,6 +398,8 @@ paths:
           $ref: "#/components/responses/Conflict"
         "428":
           $ref: "#/components/responses/PreconditionRequired"
+        "429":
+          $ref: "#/components/responses/RateLimited"
 
   /journal-changes:
     get:
@@ -429,6 +463,10 @@ paths:
                 $ref: "#/components/schemas/ConversationResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
         "401":
           $ref: "#/components/responses/Unauthorized"
 
@@ -516,6 +554,10 @@ paths:
                 $ref: "#/components/schemas/SendMessageResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "404":
@@ -597,6 +639,10 @@ paths:
                 $ref: "#/components/schemas/MemoryResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "404":
@@ -638,6 +684,10 @@ paths:
                 $ref: "#/components/schemas/MemoryResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "404":
@@ -695,6 +745,10 @@ paths:
                 $ref: "#/components/schemas/InsightJobAccepted"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "409":
@@ -780,6 +834,10 @@ paths:
                 $ref: "#/components/schemas/InsightResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "404":
@@ -915,6 +973,20 @@ components:
       headers:
         Retry-After:
           $ref: "#/components/headers/RetryAfter"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+    PayloadTooLarge:
+      description: Request body exceeds the configured limit
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+    UnsupportedMediaType:
+      description: Content-Type must be application/json
       content:
         application/json:
           schema:

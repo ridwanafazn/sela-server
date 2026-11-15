@@ -109,6 +109,23 @@ Rules:
 - Reuse of a rotated token revokes the entire token family.
 - `replaced_by` points to the replacement session for audit and reuse detection.
 
+### auth_rate_limits
+
+Stores hashed subjects for durable rate limiting.
+
+Fields:
+
+- id.
+- action.
+- subject_hash.
+- created_at.
+
+Rules:
+
+- Never store raw IP addresses or account identifiers.
+- Rows may be removed after their rate-limit window expires.
+- The lookup index is `(action, subject_hash, created_at DESC)`.
+
 ### journals
 
 Stores original journal entries and drafts.
@@ -470,6 +487,8 @@ Recommended indexes:
 - `journals(user_id, entry_date DESC, id DESC)`.
 - `journals(user_id, status, updated_at DESC)`.
 - `journals(user_id, updated_at, id)` for offline synchronization.
+- `auth_rate_limits(action, subject_hash, created_at DESC)`.
+- `auth_rate_limits(created_at)`.
 - Full-text search: generated `tsvector` column on journal title and content with GIN.
 - `conversations(user_id, updated_at DESC)`.
 - `messages(conversation_id, created_at, id)`.

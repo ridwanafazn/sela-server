@@ -80,13 +80,6 @@ func validateResponseContract(t *testing.T, request *http.Request, recorder *htt
 
 	statusKey := strconv.Itoa(recorder.Code)
 	if route.Operation.Responses.Status(recorder.Code) == nil {
-		// The canonical error model defines these codes, but the operations
-		// do not yet list them. Tracked as a contract gap for the next
-		// OpenAPI revision.
-		if recorder.Code == http.StatusRequestEntityTooLarge || recorder.Code == http.StatusUnsupportedMediaType {
-			t.Logf("contract gap: %s %s returns undocumented status %d", request.Method, request.URL.Path, recorder.Code)
-			return
-		}
 		t.Errorf("contract does not document status %s for %s %s", statusKey, request.Method, request.URL.Path)
 		return
 	}

@@ -87,6 +87,7 @@ type RateLimit struct {
 	LoginPerHourAccount  int
 	RegisterPerHourIP    int
 	RefreshPerMinuteIP   int
+	JournalPerMinute     int
 	CompanionPerMinute   int
 	InsightPerHour       int
 	InsightPerDay        int
@@ -269,6 +270,7 @@ func load(lookup func(string) (string, bool)) (*Config, error) {
 		LoginPerHourAccount:  intValue(lookup, "RATE_LIMIT_LOGIN_PER_HOUR_ACCOUNT", 10, &problems),
 		RegisterPerHourIP:    intValue(lookup, "RATE_LIMIT_REGISTER_PER_HOUR_IP", 3, &problems),
 		RefreshPerMinuteIP:   intValue(lookup, "RATE_LIMIT_REFRESH_PER_MINUTE_IP", 30, &problems),
+		JournalPerMinute:     intValue(lookup, "RATE_LIMIT_JOURNAL_PER_MINUTE", 60, &problems),
 		CompanionPerMinute:   intValue(lookup, "RATE_LIMIT_COMPANION_PER_MINUTE", 30, &problems),
 		InsightPerHour:       intValue(lookup, "RATE_LIMIT_INSIGHT_PER_HOUR", 5, &problems),
 		InsightPerDay:        intValue(lookup, "RATE_LIMIT_INSIGHT_PER_DAY", 20, &problems),
@@ -282,6 +284,7 @@ func load(lookup func(string) (string, bool)) (*Config, error) {
 		"RATE_LIMIT_LOGIN_PER_HOUR_ACCOUNT":  rateLimitCfg.LoginPerHourAccount,
 		"RATE_LIMIT_REGISTER_PER_HOUR_IP":    rateLimitCfg.RegisterPerHourIP,
 		"RATE_LIMIT_REFRESH_PER_MINUTE_IP":   rateLimitCfg.RefreshPerMinuteIP,
+		"RATE_LIMIT_JOURNAL_PER_MINUTE":      rateLimitCfg.JournalPerMinute,
 		"RATE_LIMIT_COMPANION_PER_MINUTE":    rateLimitCfg.CompanionPerMinute,
 		"RATE_LIMIT_INSIGHT_PER_HOUR":        rateLimitCfg.InsightPerHour,
 		"RATE_LIMIT_INSIGHT_PER_DAY":         rateLimitCfg.InsightPerDay,

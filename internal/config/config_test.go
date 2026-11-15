@@ -59,6 +59,9 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.RateLimit.CompanionPerMinute != 30 {
 		t.Errorf("CompanionPerMinute = %d, want 30", cfg.RateLimit.CompanionPerMinute)
 	}
+	if cfg.RateLimit.JournalPerMinute != 60 {
+		t.Errorf("JournalPerMinute = %d, want 60", cfg.RateLimit.JournalPerMinute)
+	}
 	if cfg.RateLimit.InsightPerHour != 5 || cfg.RateLimit.InsightPerDay != 20 {
 		t.Errorf("insight limits = (%d, %d), want (5, 20)", cfg.RateLimit.InsightPerHour, cfg.RateLimit.InsightPerDay)
 	}

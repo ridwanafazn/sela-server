@@ -49,6 +49,20 @@ Table auth_sessions {
   Note: "Refresh tokens are rotated. Reuse of a rotated token revokes the token family."
 }
 
+Table auth_rate_limits {
+  id uuid [pk]
+  action varchar(50) [not null]
+  subject_hash text [not null]
+  created_at timestamptz [not null]
+
+  indexes {
+    (action, subject_hash, created_at)
+    (created_at)
+  }
+
+  Note: "Stores hashed rate-limit subjects, never raw IP addresses or account identifiers. Rows may be deleted after their window expires."
+}
+
 Table journals {
   id uuid [pk]
   user_id uuid [not null]

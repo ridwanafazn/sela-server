@@ -13,6 +13,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/ridwanafazn/sela-server/internal/modules/memory"
+	"github.com/ridwanafazn/sela-server/internal/platform/ratelimit"
 	"github.com/ridwanafazn/sela-server/internal/shared/apierrors"
 	"github.com/ridwanafazn/sela-server/internal/shared/ids"
 )
@@ -32,19 +33,29 @@ type JobEnqueuer interface {
 
 // Service implements journal rules, optimistic concurrency, and idempotency.
 type Service struct {
-	repo *Repository
-	jobs JobEnqueuer
-	now  func() time.Time
+	repo    *Repository
+	jobs    JobEnqueuer
+	limiter *ratelimit.Limiter
+	limits  Limits
+	now     func() time.Time
+}
+
+// Limits holds journal write limits.
+type Limits struct {
+	PerMinute int
 }
 
 // NewService creates the journal service. jobs may be nil in tests that do
 // not exercise background processing.
-func NewService(repo *Repository, jobs JobEnqueuer) *Service {
-	return &Service{repo: repo, jobs: jobs, now: time.Now}
+func NewService(repo *Repository, jobs JobEnqueuer, limiter *ratelimit.Limiter, limits Limits) *Service {
+	return &Service{repo: repo, jobs: jobs, limiter: limiter, limits: limits, now: time.Now}
 }
 
 // Create creates a journal or returns the stored response for a retried key.
 func (s *Service) Create(ctx context.Context, userID, idempotencyKey string, input CreateInput) (*View, int, error) {
+	if err := s.enforceWriteLimit(ctx, userID); err != nil {
+		return nil, 0, err
+	}
 	if err := validateCreate(input); err != nil {
 		return nil, 0, err
 	}
@@ -224,6 +235,9 @@ func (s *Service) Get(ctx context.Context, userID, journalID string) (*View, err
 
 // Update applies an optimistic-concurrency update.
 func (s *Service) Update(ctx context.Context, userID, journalID string, ifMatch int, input UpdateInput) (*View, error) {
+	if err := s.enforceWriteLimit(ctx, userID); err != nil {
+		return nil, err
+	}
 	if err := validateUpdate(input); err != nil {
 		return nil, err
 	}
@@ -299,6 +313,9 @@ func (s *Service) Update(ctx context.Context, userID, journalID string, ifMatch 
 
 // Delete soft-deletes a journal and advances its version.
 func (s *Service) Delete(ctx context.Context, userID, journalID string, ifMatch int) error {
+	if err := s.enforceWriteLimit(ctx, userID); err != nil {
+		return err
+	}
 	return s.repo.Transaction(ctx, func(tx *gorm.DB) error {
 		entry, err := s.repo.GetForUpdate(tx, userID, journalID)
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -442,6 +459,20 @@ func validateUpdate(input UpdateInput) error {
 
 func validStatus(status string) bool {
 	return status == StatusDraft || status == StatusActive
+}
+
+func (s *Service) enforceWriteLimit(ctx context.Context, userID string) error {
+	if s.limiter == nil {
+		return nil
+	}
+	decision, err := s.limiter.Check(ctx, "journal.write", userID, s.limits.PerMinute, time.Minute)
+	if err != nil {
+		return err
+	}
+	if !decision.Allowed {
+		return apierrors.RateLimited(decision.RetryAfter)
+	}
+	return s.limiter.Record(ctx, "journal.write", userID)
 }
 
 // ContentHash returns the canonical content hash used for derived-work job

@@ -196,11 +196,19 @@ func (r *Repository) SaveTx(tx *gorm.DB, journal *Journal) error {
 
 // SoftDeleteTx marks a journal deleted and advances its version.
 func (r *Repository) SoftDeleteTx(tx *gorm.DB, id, userID string, version int, now time.Time) error {
-	return tx.Exec(
+	if err := tx.Exec(
 		`UPDATE journals
 		 SET deleted_at = ?, version = ?, updated_at = ?
 		 WHERE id = ? AND user_id = ? AND deleted_at IS NULL`,
 		now, version, now, id, userID,
+	).Error; err != nil {
+		return err
+	}
+	return tx.Exec(
+		`UPDATE insight_evidence
+		 SET source_deleted_at = ?
+		 WHERE journal_id = ? AND source_deleted_at IS NULL`,
+		now, id,
 	).Error
 }
 

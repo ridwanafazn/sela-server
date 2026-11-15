@@ -448,11 +448,19 @@ func (r *Repository) Save(tx *gorm.DB, memory *Memory) error {
 
 // SoftDelete marks a memory deleted.
 func (r *Repository) SoftDelete(tx *gorm.DB, memory *Memory, now time.Time) error {
-	return tx.Exec(
+	if err := tx.Exec(
 		`UPDATE personal_memories
 		 SET status = 'deleted', deleted_at = ?, updated_at = ?
 		 WHERE id = ? AND user_id = ? AND deleted_at IS NULL`,
 		now, now, memory.ID, memory.UserID,
+	).Error; err != nil {
+		return err
+	}
+	return tx.Exec(
+		`UPDATE insight_evidence
+		 SET source_deleted_at = ?
+		 WHERE memory_id = ? AND source_deleted_at IS NULL`,
+		now, memory.ID,
 	).Error
 }
 

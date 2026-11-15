@@ -279,6 +279,28 @@ func TestInsightGenerationAndFeedbackFlow(t *testing.T) {
 		t.Errorf("generation_type = %s, want on_demand", detail.GenerationType)
 	}
 
+	deletedSource := do(t, router, http.MethodDelete, journalAPIPath(first.ID), requestOptions{
+		token:   user.AccessToken,
+		headers: map[string]string{"If-Match": "1"},
+	})
+	if deletedSource.Status != http.StatusNoContent {
+		t.Fatalf("delete evidence source = %d: %s", deletedSource.Status, deletedSource.Body)
+	}
+	afterSourceDelete := decodeJSON[insightEnvelope](t, do(t, router, http.MethodGet,
+		"/api/v1/insights/"+*completed.InsightID, requestOptions{token: user.AccessToken}).Body).Data
+	foundDeleted := false
+	for _, item := range afterSourceDelete.Evidence {
+		if item.SourceID == first.ID {
+			foundDeleted = true
+			if !item.SourceDeleted || item.Note != "This source was deleted." {
+				t.Errorf("deleted evidence = %+v, want redacted note", item)
+			}
+		}
+	}
+	if !foundDeleted {
+		t.Error("deleted source is missing from insight evidence")
+	}
+
 	if result := do(t, router, http.MethodGet, "/api/v1/insights/"+*completed.InsightID, requestOptions{token: stranger.AccessToken}); result.Status != http.StatusNotFound {
 		t.Errorf("stranger get insight = %d, want 404", result.Status)
 	}

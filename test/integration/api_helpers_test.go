@@ -126,6 +126,7 @@ func testConfig() *config.Config {
 			LoginPerHourAccount:  1000,
 			RegisterPerHourIP:    1000,
 			RefreshPerMinuteIP:   1000,
+			JournalPerMinute:     1000,
 			CompanionPerMinute:   1000,
 			InsightPerHour:       1000,
 			InsightPerDay:        1000,

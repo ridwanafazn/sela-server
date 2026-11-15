@@ -254,11 +254,11 @@ func (r *Repository) Evidence(ctx context.Context, insightID string) ([]Evidence
 		        COALESCE(e.journal_id, e.message_id, e.memory_id) AS source_id,
 		        e.note,
 		        COALESCE(j.entry_date::timestamptz, m.created_at, pm.updated_at) AS source_date,
-		        CASE
+		        (CASE
 		          WHEN e.journal_id IS NOT NULL THEN (j.id IS NULL OR j.deleted_at IS NOT NULL)
 		          WHEN e.message_id IS NOT NULL THEN (m.id IS NULL OR c.deleted_at IS NOT NULL)
 		          ELSE (pm.id IS NULL OR pm.deleted_at IS NOT NULL)
-		        END AS source_deleted
+		        END OR e.source_deleted_at IS NOT NULL) AS source_deleted
 		 FROM insight_evidence e
 		 LEFT JOIN journals j ON j.id = e.journal_id
 		 LEFT JOIN messages m ON m.id = e.message_id
@@ -269,6 +269,11 @@ func (r *Repository) Evidence(ctx context.Context, insightID string) ([]Evidence
 		insightID,
 	).Scan(&rows).Error; err != nil {
 		return nil, fmt.Errorf("list insight evidence: %w", err)
+	}
+	for index := range rows {
+		if rows[index].SourceDeleted {
+			rows[index].Note = "This source was deleted."
+		}
 	}
 	if rows == nil {
 		rows = []EvidenceView{}
