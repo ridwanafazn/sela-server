@@ -24,6 +24,7 @@ Backend Phase 2 is complete and frozen at `v0.2.0`.
 - API contract: OpenAPI `1.3.0`.
 - Database schema: migration version `16`.
 - Release notes: `CHANGELOG.md`.
+- Session handoff: `HANDOFF.md`.
 - Freeze checklist and next inputs: `docs/backend/10-phase-2-freeze.md`.
 - Active focus phase: `docs/backend/11-focus-phase.md`.
 

@@ -10,6 +10,19 @@
 - Deployment guide: `docs/backend/12-cloud-run-neon-vertex-setup.md`.
 - This phase does not start until the required inputs below are available.
 
+## Session status at handoff
+
+Local dev services are stopped. The next action is account setup and staging
+deployment, not more backend feature work. See `HANDOFF.md`.
+
+The pre-beta sequence is unchanged:
+
+1. Real Vertex embeddings and evaluation.
+2. Cloud Run + Neon staging.
+3. Android Flutter MVP against staging.
+4. Beta hardening.
+5. Offline-first journaling.
+
 ## Ordered workstreams
 
 ### 1. Real embeddings and live evaluation
