@@ -325,6 +325,9 @@ The backend must verify:
 - Duplicate candidates.
 - Existing memory conflicts.
 
+Persist validated conflicts in `memory_conflicts` and expose them in memory
+detail. Do not merge conflicting records.
+
 The model must not be allowed to invent source IDs.
 
 ## 9. Insight Generation

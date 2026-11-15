@@ -35,24 +35,67 @@ func (q *Queue) Transaction(ctx context.Context, fn func(tx *gorm.DB) error) err
 // EnqueueJournalEmbedding adds an idempotent embedding job inside a
 // transaction. Re-enqueuing the same journal content is a no-op.
 func (q *Queue) EnqueueJournalEmbedding(ctx context.Context, tx *gorm.DB, userID, journalID, contentHash string, runAt time.Time) error {
-	return q.enqueueJournalJob(ctx, tx, userID, journalID, contentHash, TypeJournalEmbedding, runAt)
+	return q.enqueueJournalJob(ctx, tx, userID, journalID, contentHash, TypeJournalEmbedding, "", runAt)
+}
+
+// EnqueueJournalEmbeddingForModel adds an embedding job keyed by model so a
+// model migration can re-embed journals that already have vectors.
+func (q *Queue) EnqueueJournalEmbeddingForModel(ctx context.Context, tx *gorm.DB, userID, journalID, contentHash, model string, runAt time.Time) error {
+	return q.enqueueJournalJob(ctx, tx, userID, journalID, contentHash, TypeJournalEmbedding, "model:"+model, runAt)
 }
 
 // EnqueueJournalMemoryExtraction adds an idempotent memory extraction job
 // inside a transaction.
 func (q *Queue) EnqueueJournalMemoryExtraction(ctx context.Context, tx *gorm.DB, userID, journalID, contentHash string, runAt time.Time) error {
-	return q.enqueueJournalJob(ctx, tx, userID, journalID, contentHash, TypeJournalMemoryExtraction, runAt)
+	return q.enqueueJournalJob(ctx, tx, userID, journalID, contentHash, TypeJournalMemoryExtraction, "", runAt)
+}
+
+// EnqueueJournalMemoryExtractionForVersion adds an extraction job keyed by
+// prompt version so a prompt migration can re-extract journals.
+func (q *Queue) EnqueueJournalMemoryExtractionForVersion(ctx context.Context, tx *gorm.DB, userID, journalID, contentHash, promptVersion string, runAt time.Time) error {
+	return q.enqueueJournalJob(ctx, tx, userID, journalID, contentHash, TypeJournalMemoryExtraction, "prompt:"+promptVersion, runAt)
+}
+
+// EnqueueMessageMemoryExtraction adds an idempotent extraction job for a user
+// message inside a transaction.
+func (q *Queue) EnqueueMessageMemoryExtraction(ctx context.Context, tx *gorm.DB, userID, messageID, contentHash string, runAt time.Time) error {
+	return q.enqueueJob(
+		ctx, tx, userID, TypeMessageMemoryExtraction,
+		map[string]string{"message_id": messageID},
+		[]string{TypeMessageMemoryExtraction, messageID, contentHash},
+		runAt,
+	)
 }
 
 func (q *Queue) enqueueJournalJob(
 	ctx context.Context,
 	tx *gorm.DB,
-	userID, journalID, contentHash, jobType string,
+	userID, journalID, contentHash, jobType, variant string,
 	runAt time.Time,
 ) error {
-	payload, err := json.Marshal(map[string]string{"journal_id": journalID})
+	parts := []string{jobType, journalID, contentHash}
+	if variant != "" {
+		parts = append(parts, variant)
+	}
+	return q.enqueueJob(
+		ctx, tx, userID, jobType,
+		map[string]string{"journal_id": journalID},
+		parts,
+		runAt,
+	)
+}
+
+func (q *Queue) enqueueJob(
+	ctx context.Context,
+	tx *gorm.DB,
+	userID, jobType string,
+	payload map[string]string,
+	keyParts []string,
+	runAt time.Time,
+) error {
+	encodedPayload, err := json.Marshal(payload)
 	if err != nil {
-		return fmt.Errorf("encode journal job payload: %w", err)
+		return fmt.Errorf("encode job payload: %w", err)
 	}
 
 	id, err := ids.New()
@@ -60,7 +103,7 @@ func (q *Queue) enqueueJournalJob(
 		return err
 	}
 
-	key := uuid.NewSHA1(uuid.NameSpaceOID, []byte(jobType+":"+journalID+":"+contentHash)).String()
+	key := uuid.NewSHA1(uuid.NameSpaceOID, []byte(joinKeyParts(keyParts))).String()
 	now := time.Now().UTC()
 
 	return tx.Exec(
@@ -68,8 +111,19 @@ func (q *Queue) enqueueJournalJob(
 		 (id, user_id, job_type, payload, status, attempts, max_attempts, run_at, idempotency_key, created_at, updated_at)
 		 VALUES (?, ?, ?, ?::jsonb, 'pending', 0, ?, ?, ?, ?, ?)
 		 ON CONFLICT (user_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING`,
-		id, userID, jobType, string(payload), defaultMaxAttempts, runAt, key, now, now,
+		id, userID, jobType, string(encodedPayload), defaultMaxAttempts, runAt, key, now, now,
 	).Error
+}
+
+func joinKeyParts(parts []string) string {
+	result := ""
+	for index, part := range parts {
+		if index > 0 {
+			result += ":"
+		}
+		result += part
+	}
+	return result
 }
 
 // Enqueue adds a generic job outside a transaction.
@@ -110,7 +164,14 @@ func (q *Queue) Enqueue(ctx context.Context, job *Job) error {
 func (q *Queue) Claim(ctx context.Context, workerID string) (*Job, error) {
 	if err := q.db.WithContext(ctx).Exec(
 		`UPDATE scheduled_jobs
-		 SET status = 'retry', locked_at = NULL, locked_by = NULL, updated_at = now()
+		 SET status = CASE WHEN attempts >= max_attempts THEN 'failed' ELSE 'retry' END,
+		     locked_at = NULL,
+		     locked_by = NULL,
+		     last_error = CASE
+		       WHEN attempts >= max_attempts THEN 'job lock expired after final attempt'
+		       ELSE last_error
+		     END,
+		     updated_at = now()
 		 WHERE status = 'processing' AND locked_at < ?`,
 		time.Now().UTC().Add(-staleLockAge),
 	).Error; err != nil {

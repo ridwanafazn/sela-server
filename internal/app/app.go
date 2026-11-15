@@ -77,8 +77,9 @@ func BuildRouter(cfg *config.Config, log *slog.Logger, db *database.DB) (*gin.En
 	userService := user.NewService(user.NewRepository(db.Gorm))
 	userHandler := user.NewHandler(userService)
 
+	queue := job.NewQueue(db.Gorm)
 	journalRepo := journal.NewRepository(db.Gorm)
-	journalService := journal.NewService(journalRepo, job.NewQueue(db.Gorm))
+	journalService := journal.NewService(journalRepo, queue)
 	journalHandler := journal.NewHandler(journalService)
 
 	retrieval := journal.NewRetrievalService(
@@ -96,6 +97,7 @@ func BuildRouter(cfg *config.Config, log *slog.Logger, db *database.DB) (*gin.En
 		conversation.NewRepository(db.Gorm),
 		retrieval,
 		memoryService,
+		queue,
 		llm,
 		limiter,
 		conversation.Limits{CompanionPerMinute: cfg.RateLimit.CompanionPerMinute},

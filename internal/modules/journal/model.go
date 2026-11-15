@@ -31,6 +31,13 @@ func (Journal) TableName() string {
 	return "journals"
 }
 
+// BackfillTarget is an active journal queued for derived-work regeneration.
+type BackfillTarget struct {
+	ID      string `gorm:"column:id"`
+	UserID  string `gorm:"column:user_id"`
+	Content string `gorm:"column:content"`
+}
+
 // View is the API representation of a journal.
 type View struct {
 	ID        string    `json:"id"`

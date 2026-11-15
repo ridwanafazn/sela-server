@@ -156,6 +156,27 @@ func (r *Repository) List(ctx context.Context, userID string, filter ListFilter,
 	return journals, nil
 }
 
+// ActiveForBackfill returns active journals after the given ID for derived-work
+// regeneration. Content stays in memory only long enough to compute its hash.
+func (r *Repository) ActiveForBackfill(ctx context.Context, afterID string, limit int) ([]BackfillTarget, error) {
+	query := `SELECT id, user_id, content
+	          FROM journals
+	          WHERE status = 'active' AND deleted_at IS NULL`
+	args := []any{}
+	if afterID != "" {
+		query += ` AND id > ?::uuid`
+		args = append(args, afterID)
+	}
+	query += ` ORDER BY id LIMIT ?`
+	args = append(args, limit)
+
+	var targets []BackfillTarget
+	if err := r.db.WithContext(ctx).Raw(query, args...).Scan(&targets).Error; err != nil {
+		return nil, fmt.Errorf("list backfill journals: %w", err)
+	}
+	return targets, nil
+}
+
 // SaveTx writes the mutable journal fields and the current version.
 func (r *Repository) SaveTx(tx *gorm.DB, journal *Journal) error {
 	return tx.Exec(
@@ -180,38 +201,6 @@ func (r *Repository) SoftDeleteTx(tx *gorm.DB, id, userID string, version int, n
 		 SET deleted_at = ?, version = ?, updated_at = ?
 		 WHERE id = ? AND user_id = ? AND deleted_at IS NULL`,
 		now, version, now, id, userID,
-	).Error
-}
-
-// DowngradeMemoriesForDeletedJournalTx re-evaluates memories whose only
-// remaining sources are soft-deleted journals. They return to candidate status
-// with zero sources for user review.
-func (r *Repository) DowngradeMemoriesForDeletedJournalTx(tx *gorm.DB, userID, journalID string, now time.Time) error {
-	return tx.Exec(
-		`UPDATE personal_memories m
-		 SET status = CASE WHEN m.status = 'active' THEN 'candidate' ELSE m.status END,
-		     source_count = (
-		       SELECT count(*)
-		       FROM memory_sources ms2
-		       LEFT JOIN journals j2 ON j2.id = ms2.journal_id
-		       WHERE ms2.memory_id = m.id
-		         AND (ms2.journal_id IS NULL OR j2.deleted_at IS NULL)
-		     ),
-		     updated_at = ?
-		 WHERE m.user_id = ?
-		   AND m.deleted_at IS NULL
-		   AND EXISTS (
-		     SELECT 1 FROM memory_sources ms
-		     WHERE ms.memory_id = m.id AND ms.journal_id = ?
-		   )
-		   AND NOT EXISTS (
-		     SELECT 1
-		     FROM memory_sources ms3
-		     LEFT JOIN journals j3 ON j3.id = ms3.journal_id
-		     WHERE ms3.memory_id = m.id
-		       AND (ms3.journal_id IS NULL OR j3.deleted_at IS NULL)
-		   )`,
-		now, userID, journalID,
 	).Error
 }
 
@@ -294,9 +283,9 @@ func (r *Repository) TextCandidates(ctx context.Context, userID, query string, l
 	return candidates, nil
 }
 
-// VectorCandidates returns semantic candidates, keeping the best-scoring
-// chunk per journal.
-func (r *Repository) VectorCandidates(ctx context.Context, userID, vector string, limit int) ([]Candidate, error) {
+// VectorCandidates returns semantic candidates for the active embedding
+// model, keeping the best-scoring chunk per journal.
+func (r *Repository) VectorCandidates(ctx context.Context, userID, vector, model string, limit int) ([]Candidate, error) {
 	var rows []Candidate
 	err := r.db.WithContext(ctx).Raw(
 		`WITH q AS (SELECT ?::vector AS v)
@@ -306,10 +295,11 @@ func (r *Repository) VectorCandidates(ctx context.Context, userID, vector string
 		 JOIN journals j ON j.id = je.journal_id
 		 CROSS JOIN q
 		 WHERE je.user_id = ? AND j.user_id = ?
+		   AND je.embedding_model = ?
 		   AND j.status = 'active' AND j.deleted_at IS NULL
 		 ORDER BY je.embedding <=> q.v
 		 LIMIT ?`,
-		vector, userID, userID, limit,
+		vector, userID, userID, model, limit,
 	).Scan(&rows).Error
 	if err != nil {
 		return nil, fmt.Errorf("vector candidates: %w", err)

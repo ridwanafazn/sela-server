@@ -80,7 +80,8 @@ func TestNormalizeCategory(t *testing.T) {
 }
 
 func TestValidateCandidateRejectsUnsafeOutput(t *testing.T) {
-	entry := &JournalSource{
+	entry := &extractionSource{
+		Type:    sourceTypeJournal,
 		ID:      "11111111-1111-1111-1111-111111111111",
 		Content: "I could not sleep well because of work.",
 	}
@@ -145,7 +146,8 @@ func TestValidateCandidateRejectsUnsafeOutput(t *testing.T) {
 }
 
 func TestValidateCandidateRejectsInventedSource(t *testing.T) {
-	entry := &JournalSource{
+	entry := &extractionSource{
+		Type:    sourceTypeJournal,
 		ID:      "11111111-1111-1111-1111-111111111111",
 		Content: "A calm walk by the river helped me reset.",
 	}
@@ -252,12 +254,15 @@ func TestRankMemoriesRespectsLimit(t *testing.T) {
 }
 
 type fakeExtractionRepository struct {
-	entry    *JournalSource
-	eligible map[string]bool
-	owned    map[string]bool
-	existing *Memory
-	created  []*Memory
-	added    int
+	entry       *JournalSource
+	message     *MessageSource
+	eligible    map[string]bool
+	eligibleMsg map[string]bool
+	owned       map[string]bool
+	existing    *Memory
+	created     []*Memory
+	added       int
+	conflicts   int
 }
 
 func (f *fakeExtractionRepository) JournalForExtraction(context.Context, string) (*JournalSource, error) {
@@ -267,10 +272,27 @@ func (f *fakeExtractionRepository) JournalForExtraction(context.Context, string)
 	return f.entry, nil
 }
 
+func (f *fakeExtractionRepository) MessageForExtraction(context.Context, string) (*MessageSource, error) {
+	if f.message == nil {
+		return nil, gorm.ErrRecordNotFound
+	}
+	return f.message, nil
+}
+
 func (f *fakeExtractionRepository) EligibleJournalIDs(_ context.Context, _ string, ids []string) (map[string]bool, error) {
 	result := make(map[string]bool, len(ids))
 	for _, id := range ids {
 		if f.eligible[id] {
+			result[id] = true
+		}
+	}
+	return result, nil
+}
+
+func (f *fakeExtractionRepository) EligibleMessageIDs(_ context.Context, _ string, ids []string) (map[string]bool, error) {
+	result := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		if f.eligibleMsg[id] {
 			result[id] = true
 		}
 	}
@@ -294,12 +316,18 @@ func (f *fakeExtractionRepository) FindByNormalizedContent(context.Context, stri
 	return f.existing, nil
 }
 
-func (f *fakeExtractionRepository) AddJournalSource(context.Context, string, string, time.Time) error {
+func (f *fakeExtractionRepository) AddSource(context.Context, string, SourceRef, time.Time) error {
 	f.added++
 	return nil
 }
 
-func (f *fakeExtractionRepository) Create(_ context.Context, memory *Memory, _ string) error {
+func (f *fakeExtractionRepository) AddConflicts(context.Context, string, []string, time.Time) error {
+	f.conflicts++
+	return nil
+}
+
+func (f *fakeExtractionRepository) Create(_ context.Context, memory *Memory, _ SourceRef, conflicts []string) error {
 	f.created = append(f.created, memory)
+	f.conflicts += len(conflicts)
 	return nil
 }

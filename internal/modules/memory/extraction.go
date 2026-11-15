@@ -20,6 +20,9 @@ import (
 )
 
 const (
+	sourceTypeJournal = "journal"
+	sourceTypeMessage = "message"
+
 	maxCandidatesPerSource = 10
 	maxMemoryContentRunes  = 500
 	minMemoryContentRunes  = 3
@@ -66,23 +69,36 @@ type extractedMemory struct {
 	ConflictsWith []string `json:"conflicts_with"`
 }
 
-type validatedCandidate struct {
+type extractionSource struct {
+	Type       string
+	ID         string
+	UserID     string
 	Content    string
-	Category   *string
-	Confidence float64
+	Title      *string
+	OccurredAt time.Time
+}
+
+type validatedCandidate struct {
+	Content       string
+	Category      *string
+	Confidence    float64
+	ConflictsWith []string
 }
 
 // ExtractionRepository is the persistence required by the extraction worker.
 type ExtractionRepository interface {
 	JournalForExtraction(ctx context.Context, journalID string) (*JournalSource, error)
+	MessageForExtraction(ctx context.Context, messageID string) (*MessageSource, error)
 	EligibleJournalIDs(ctx context.Context, userID string, journalIDs []string) (map[string]bool, error)
+	EligibleMessageIDs(ctx context.Context, userID string, messageIDs []string) (map[string]bool, error)
 	OwnedMemoryIDs(ctx context.Context, userID string, memoryIDs []string) (map[string]bool, error)
 	FindByNormalizedContent(ctx context.Context, userID, content string) (*Memory, error)
-	AddJournalSource(ctx context.Context, memoryID, journalID string, now time.Time) error
-	Create(ctx context.Context, memory *Memory, journalID string) error
+	AddSource(ctx context.Context, memoryID string, source SourceRef, now time.Time) error
+	AddConflicts(ctx context.Context, memoryID string, conflicts []string, now time.Time) error
+	Create(ctx context.Context, memory *Memory, source SourceRef, conflicts []string) error
 }
 
-// ExtractionService turns journal entries into candidate memories.
+// ExtractionService turns source records into candidate memories.
 type ExtractionService struct {
 	repo  ExtractionRepository
 	llm   ai.LLMProvider
@@ -114,7 +130,6 @@ func (s *ExtractionService) ProcessJournal(ctx context.Context, journalID string
 	if err != nil {
 		return err
 	}
-
 	if entry.DeletedAt != nil || entry.Status != "active" {
 		s.log.DebugContext(ctx, "skipped memory extraction for ineligible journal",
 			slog.String("journal_id", journalID),
@@ -122,18 +137,57 @@ func (s *ExtractionService) ProcessJournal(ctx context.Context, journalID string
 		)
 		return nil
 	}
+
+	return s.process(ctx, &extractionSource{
+		Type:       sourceTypeJournal,
+		ID:         entry.ID,
+		UserID:     entry.UserID,
+		Content:    entry.Content,
+		Title:      entry.Title,
+		OccurredAt: entry.EntryDate,
+	})
+}
+
+// ProcessMessage extracts candidate memories from one user message in an
+// active conversation.
+func (s *ExtractionService) ProcessMessage(ctx context.Context, messageID string) error {
+	message, err := s.repo.MessageForExtraction(ctx, messageID)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if message.Role != "user" || message.ConversationDeletedAt != nil {
+		s.log.DebugContext(ctx, "skipped memory extraction for ineligible message",
+			slog.String("message_id", messageID),
+			slog.String("role", message.Role),
+		)
+		return nil
+	}
+
+	return s.process(ctx, &extractionSource{
+		Type:       sourceTypeMessage,
+		ID:         message.ID,
+		UserID:     message.UserID,
+		Content:    message.Content,
+		OccurredAt: message.CreatedAt,
+	})
+}
+
+func (s *ExtractionService) process(ctx context.Context, source *extractionSource) error {
 	if s.llm == nil {
 		return fmt.Errorf("%w: language provider is not configured", ai.ErrInvalidRequest)
 	}
 
 	response, err := s.llm.Generate(ctx, ai.GenerateRequest{
 		Model:          s.model,
-		System:         prompts.MemoryExtractionV1,
-		Messages:       []ai.Message{{Role: ai.RoleUser, Content: extractionInput(entry)}},
+		System:         prompts.MemoryExtractionV2,
+		Messages:       []ai.Message{{Role: ai.RoleUser, Content: extractionInput(source)}},
 		Temperature:    extractionTemperature,
 		MaxTokens:      extractionMaxTokens,
 		ResponseSchema: extractionSchema,
-		SessionID:      "memory-extraction:" + entry.ID,
+		SessionID:      "memory-extraction:" + source.Type + ":" + source.ID,
 	})
 	if err != nil {
 		return err
@@ -153,7 +207,7 @@ func (s *ExtractionService) ProcessJournal(ctx context.Context, journalID string
 
 	var sensitiveSkipped, invalidSkipped int
 	for _, raw := range parsed {
-		candidate, accepted, sensitive, err := s.validateCandidate(ctx, entry, raw)
+		candidate, accepted, sensitive, err := s.validateCandidate(ctx, source, raw)
 		if err != nil {
 			return err
 		}
@@ -175,9 +229,10 @@ func (s *ExtractionService) ProcessJournal(ctx context.Context, journalID string
 		valid = append(valid, *candidate)
 	}
 
+	sourceRef := source.reference()
 	var created, merged, skipped int
 	for _, candidate := range valid {
-		existing, err := s.repo.FindByNormalizedContent(ctx, entry.UserID, normalizedContent(candidate.Content))
+		existing, err := s.repo.FindByNormalizedContent(ctx, source.UserID, normalizedContent(candidate.Content))
 		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
 		}
@@ -189,7 +244,10 @@ func (s *ExtractionService) ProcessJournal(ctx context.Context, journalID string
 				skipped++
 				continue
 			}
-			if err := s.repo.AddJournalSource(ctx, existing.ID, entry.ID, now); err != nil {
+			if err := s.repo.AddSource(ctx, existing.ID, sourceRef, now); err != nil {
+				return err
+			}
+			if err := s.repo.AddConflicts(ctx, existing.ID, candidate.ConflictsWith, now); err != nil {
 				return err
 			}
 			merged++
@@ -202,7 +260,7 @@ func (s *ExtractionService) ProcessJournal(ctx context.Context, journalID string
 		}
 		memory := &Memory{
 			ID:          id,
-			UserID:      entry.UserID,
+			UserID:      source.UserID,
 			Content:     candidate.Content,
 			Category:    candidate.Category,
 			Status:      StatusCandidate,
@@ -211,14 +269,15 @@ func (s *ExtractionService) ProcessJournal(ctx context.Context, journalID string
 			CreatedAt:   now,
 			UpdatedAt:   now,
 		}
-		if err := s.repo.Create(ctx, memory, entry.ID); err != nil {
+		if err := s.repo.Create(ctx, memory, sourceRef, candidate.ConflictsWith); err != nil {
 			return err
 		}
 		created++
 	}
 
-	s.log.InfoContext(ctx, "journal memory extraction completed",
-		slog.String("journal_id", entry.ID),
+	s.log.InfoContext(ctx, "memory extraction completed",
+		slog.String("source_type", source.Type),
+		slog.String("source_id", source.ID),
 		slog.String("prompt_version", prompts.MemoryExtractionVersion),
 		slog.String("model", response.Model),
 		slog.Int("input_tokens", response.Usage.InputTokens),
@@ -235,7 +294,7 @@ func (s *ExtractionService) ProcessJournal(ctx context.Context, journalID string
 
 func (s *ExtractionService) validateCandidate(
 	ctx context.Context,
-	entry *JournalSource,
+	source *extractionSource,
 	raw extractedMemory,
 ) (*validatedCandidate, bool, bool, error) {
 	if raw.Sensitivity == "sensitive" {
@@ -256,7 +315,7 @@ func (s *ExtractionService) validateCandidate(
 	if runeCount < minMemoryContentRunes || runeCount > maxMemoryContentRunes {
 		return nil, false, false, nil
 	}
-	if normalizedContent(content) == normalizedContent(entry.Content) {
+	if normalizedContent(content) == normalizedContent(source.Content) {
 		return nil, false, false, nil
 	}
 
@@ -265,16 +324,15 @@ func (s *ExtractionService) validateCandidate(
 		return nil, false, false, nil
 	}
 	sourceID, err := uuid.Parse(sourceIDs[0])
-	if err != nil || sourceID.String() != entry.ID {
+	if err != nil || sourceID.String() != source.ID {
 		return nil, false, false, nil
 	}
-	sourceIDs = []string{sourceID.String()}
 
-	eligible, err := s.repo.EligibleJournalIDs(ctx, entry.UserID, sourceIDs)
+	eligible, err := s.sourceEligible(ctx, source.UserID, source.Type, source.ID)
 	if err != nil {
 		return nil, false, false, err
 	}
-	if !eligible[entry.ID] {
+	if !eligible {
 		return nil, false, false, nil
 	}
 
@@ -288,7 +346,7 @@ func (s *ExtractionService) validateCandidate(
 		canonicalConflicts = append(canonicalConflicts, parsed.String())
 	}
 	if len(canonicalConflicts) > 0 {
-		owned, err := s.repo.OwnedMemoryIDs(ctx, entry.UserID, canonicalConflicts)
+		owned, err := s.repo.OwnedMemoryIDs(ctx, source.UserID, canonicalConflicts)
 		if err != nil {
 			return nil, false, false, err
 		}
@@ -299,24 +357,67 @@ func (s *ExtractionService) validateCandidate(
 
 	confidence := *raw.Confidence
 	return &validatedCandidate{
-		Content:    content,
-		Category:   normalizeCategory(raw.Category),
-		Confidence: confidence,
+		Content:       content,
+		Category:      normalizeCategory(raw.Category),
+		Confidence:    confidence,
+		ConflictsWith: canonicalConflicts,
 	}, true, false, nil
 }
 
-func extractionInput(entry *JournalSource) string {
-	title := ""
-	if entry.Title != nil {
-		title = *entry.Title
+func (s *ExtractionService) sourceEligible(ctx context.Context, userID, sourceType, sourceID string) (bool, error) {
+	switch sourceType {
+	case sourceTypeJournal:
+		eligible, err := s.repo.EligibleJournalIDs(ctx, userID, []string{sourceID})
+		if err != nil {
+			return false, err
+		}
+		return eligible[sourceID], nil
+	case sourceTypeMessage:
+		eligible, err := s.repo.EligibleMessageIDs(ctx, userID, []string{sourceID})
+		if err != nil {
+			return false, err
+		}
+		return eligible[sourceID], nil
+	default:
+		return false, nil
 	}
-	return fmt.Sprintf(
-		"<journal id=%q date=%q title=%q>\n%s\n</journal>",
-		entry.ID,
-		entry.EntryDate.Format("2006-01-02"),
-		title,
-		entry.Content,
-	)
+}
+
+func (s *extractionSource) reference() SourceRef {
+	switch s.Type {
+	case sourceTypeJournal:
+		id := s.ID
+		return SourceRef{JournalID: &id}
+	case sourceTypeMessage:
+		id := s.ID
+		return SourceRef{MessageID: &id}
+	default:
+		return SourceRef{}
+	}
+}
+
+func extractionInput(source *extractionSource) string {
+	switch source.Type {
+	case sourceTypeMessage:
+		return fmt.Sprintf(
+			"<message id=%q date=%q role=\"user\">\n%s\n</message>",
+			source.ID,
+			source.OccurredAt.Format("2006-01-02"),
+			source.Content,
+		)
+	default:
+		title := ""
+		if source.Title != nil {
+			title = *source.Title
+		}
+		return fmt.Sprintf(
+			"<journal id=%q date=%q title=%q>\n%s\n</journal>",
+			source.ID,
+			source.OccurredAt.Format("2006-01-02"),
+			title,
+			source.Content,
+		)
+	}
 }
 
 func parseExtractionResponse(content string) ([]extractedMemory, error) {

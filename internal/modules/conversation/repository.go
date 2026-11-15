@@ -66,9 +66,9 @@ func (r *Repository) ListConversations(ctx context.Context, userID string, after
 	return conversations, nil
 }
 
-// SoftDeleteConversation marks a conversation deleted.
-func (r *Repository) SoftDeleteConversation(ctx context.Context, userID, id string, now time.Time) (bool, error) {
-	result := r.db.WithContext(ctx).Exec(
+// SoftDeleteConversationTx marks a conversation deleted inside a transaction.
+func (r *Repository) SoftDeleteConversationTx(tx *gorm.DB, userID, id string, now time.Time) (bool, error) {
+	result := tx.Exec(
 		`UPDATE conversations
 		 SET deleted_at = ?, updated_at = ?
 		 WHERE id = ? AND user_id = ? AND deleted_at IS NULL`,

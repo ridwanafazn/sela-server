@@ -42,6 +42,7 @@ type Service struct {
 	repo      *Repository
 	retrieval *journal.RetrievalService
 	memories  MemoryRetriever
+	jobs      JobEnqueuer
 	llm       ai.LLMProvider
 	limiter   *ratelimit.Limiter
 	limits    Limits
@@ -56,11 +57,17 @@ type MemoryRetriever interface {
 	Retrieve(ctx context.Context, userID, query string, limit int) ([]memory.RetrievedMemory, error)
 }
 
+// JobEnqueuer schedules derived work in the same transaction as a message.
+type JobEnqueuer interface {
+	EnqueueMessageMemoryExtraction(ctx context.Context, tx *gorm.DB, userID, messageID, contentHash string, runAt time.Time) error
+}
+
 // NewService creates the Companion service.
 func NewService(
 	repo *Repository,
 	retrieval *journal.RetrievalService,
 	memories MemoryRetriever,
+	jobs JobEnqueuer,
 	llm ai.LLMProvider,
 	limiter *ratelimit.Limiter,
 	limits Limits,
@@ -74,6 +81,7 @@ func NewService(
 		repo:      repo,
 		retrieval: retrieval,
 		memories:  memories,
+		jobs:      jobs,
 		llm:       llm,
 		limiter:   limiter,
 		limits:    limits,
@@ -171,7 +179,20 @@ func (s *Service) GetConversation(ctx context.Context, userID, conversationID st
 
 // DeleteConversation soft-deletes a conversation.
 func (s *Service) DeleteConversation(ctx context.Context, userID, conversationID string) error {
-	deleted, err := s.repo.SoftDeleteConversation(ctx, userID, conversationID, s.now().UTC())
+	now := s.now().UTC()
+	var deleted bool
+
+	err := s.repo.Transaction(ctx, func(tx *gorm.DB) error {
+		removed, err := s.repo.SoftDeleteConversationTx(tx, userID, conversationID, now)
+		if err != nil {
+			return err
+		}
+		if !removed {
+			return nil
+		}
+		deleted = true
+		return memory.ReconcileConversationSourcesTx(ctx, tx, userID, conversationID, now)
+	})
 	if err != nil {
 		return err
 	}
@@ -452,7 +473,20 @@ func (s *Service) SendMessage(ctx context.Context, userID, conversationID, idemp
 		if err := s.repo.UpdateConversationTimestamp(tx, conversationID, assistantTime); err != nil {
 			return err
 		}
-		return s.repo.CompleteIdempotency(tx, record.ID, 200, body)
+		if err := s.repo.CompleteIdempotency(tx, record.ID, 200, body); err != nil {
+			return err
+		}
+		if s.jobs == nil {
+			return nil
+		}
+		return s.jobs.EnqueueMessageMemoryExtraction(
+			ctx,
+			tx,
+			userID,
+			persistedUser.ID,
+			hashContent(persistedUser.Content),
+			assistantTime,
+		)
 	})
 	if err != nil {
 		_ = s.repo.DeleteIdempotency(ctx, record.ID)

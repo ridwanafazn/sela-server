@@ -159,6 +159,20 @@ Table memory_sources {
   Note: "Exactly one of journal_id or message_id must be populated. Enforce with a PostgreSQL CHECK constraint."
 }
 
+Table memory_conflicts {
+  id uuid [pk]
+  memory_id uuid [not null]
+  conflicting_memory_id uuid [not null]
+  created_at timestamptz [not null]
+
+  indexes {
+    (memory_id, conflicting_memory_id) [unique]
+    (conflicting_memory_id)
+  }
+
+  Note: "Records contradictions without merging memories. CHECK memory_id <> conflicting_memory_id. Relations are stored in both directions."
+}
+
 Table insights {
   id uuid [pk]
   user_id uuid [not null]
@@ -287,6 +301,8 @@ Ref: personal_memories.supersedes_memory_id > personal_memories.id
 Ref: memory_sources.memory_id > personal_memories.id
 Ref: memory_sources.journal_id > journals.id
 Ref: memory_sources.message_id > messages.id
+Ref: memory_conflicts.memory_id > personal_memories.id
+Ref: memory_conflicts.conflicting_memory_id > personal_memories.id
 
 Ref: insights.user_id > users.id
 

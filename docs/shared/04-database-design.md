@@ -246,6 +246,25 @@ Rules:
 - Enforce with a PostgreSQL CHECK constraint.
 - `source_excerpt` must be minimized and must not duplicate full source content.
 
+### memory_conflicts
+
+Records contradictions between two memories. Neither memory is merged or
+deleted; both remain reviewable.
+
+Fields:
+
+- id.
+- memory_id.
+- conflicting_memory_id.
+- created_at.
+
+Rules:
+
+- A memory cannot conflict with itself.
+- Each ordered pair is unique.
+- Relations are recorded in both directions for display.
+- Deleting a memory cascades its conflict records.
+
 ### insights
 
 Stores completed insight records.
@@ -385,6 +404,7 @@ Rules:
 - One conversation has many messages.
 - One user has many memories.
 - One memory has many memory sources.
+- One memory may have many conflicting memories.
 - One memory may supersede another memory.
 - One user has many insights.
 - One insight has many evidence records.
@@ -405,6 +425,7 @@ Required constraints:
 - `period_start <= period_end`.
 - Exactly one evidence source per evidence row.
 - Exactly one source per memory-source row.
+- A memory conflict cannot reference itself and each pair is unique.
 - Unique idempotency keys per user.
 - Unique message idempotency keys per conversation.
 
@@ -430,6 +451,8 @@ Recommended indexes:
 - `insights(user_id, created_at DESC, id DESC)`.
 - `insights(user_id, period_start)`.
 - `memory_sources(memory_id)`.
+- `memory_conflicts(memory_id, conflicting_memory_id)` unique.
+- `memory_conflicts(conflicting_memory_id)`.
 - `insight_evidence(insight_id)`.
 - `insight_feedback(insight_id, created_at)`.
 - `scheduled_jobs(status, run_at)` partial index for claimable jobs.

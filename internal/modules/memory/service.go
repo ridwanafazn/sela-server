@@ -13,6 +13,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/ridwanafazn/sela-server/internal/shared/apierrors"
+	"github.com/ridwanafazn/sela-server/internal/shared/ids"
 	"github.com/ridwanafazn/sela-server/internal/shared/textquery"
 )
 
@@ -117,10 +118,17 @@ func (s *Service) Get(ctx context.Context, userID, memoryID string) (*Detail, er
 	if err != nil {
 		return nil, err
 	}
+	conflicts, err := s.repo.Conflicts(ctx, memory.ID)
+	if err != nil {
+		return nil, err
+	}
 
-	detail := &Detail{View: newView(memory), Sources: sources}
+	detail := &Detail{View: newView(memory), Sources: sources, ConflictsWith: conflicts}
 	if detail.Sources == nil {
 		detail.Sources = []SourceView{}
+	}
+	if detail.ConflictsWith == nil {
+		detail.ConflictsWith = []string{}
 	}
 	return detail, nil
 }
@@ -201,6 +209,7 @@ func (s *Service) Feedback(ctx context.Context, userID, memoryID string, input F
 		})
 	}
 
+	resultID := memoryID
 	err := s.repo.Transaction(ctx, func(tx *gorm.DB) error {
 		memory, err := s.repo.GetForUpdate(tx, userID, memoryID)
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -215,22 +224,51 @@ func (s *Service) Feedback(ctx context.Context, userID, memoryID string, input F
 		case "confirm":
 			memory.Status = StatusActive
 			memory.LastConfirmedAt = &now
-		case "correct":
-			memory.Content = *corrected
-			memory.Status = StatusActive
-			memory.LastConfirmedAt = &now
+			memory.UpdatedAt = now
+			return s.repo.Save(tx, memory)
 		case "reject":
 			memory.Status = StatusRejected
-		}
-		memory.UpdatedAt = now
+			memory.UpdatedAt = now
+			return s.repo.Save(tx, memory)
+		case "correct":
+			if *corrected == strings.TrimSpace(memory.Content) {
+				memory.Status = StatusActive
+				memory.LastConfirmedAt = &now
+				memory.UpdatedAt = now
+				return s.repo.Save(tx, memory)
+			}
 
-		return s.repo.Save(tx, memory)
+			replacementID, err := ids.New()
+			if err != nil {
+				return err
+			}
+			replacement := &Memory{
+				ID:                 replacementID,
+				UserID:             userID,
+				Content:            *corrected,
+				Category:           memory.Category,
+				Status:             StatusActive,
+				Confidence:         memory.Confidence,
+				SourceCount:        memory.SourceCount,
+				SupersedesMemoryID: &memory.ID,
+				LastConfirmedAt:    &now,
+				CreatedAt:          now,
+				UpdatedAt:          now,
+			}
+			if err := s.repo.CreateReplacementTx(tx, replacement, memory.ID); err != nil {
+				return err
+			}
+			resultID = replacementID
+			return nil
+		default:
+			return apierrors.Internal()
+		}
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	return s.Get(ctx, userID, memoryID)
+	return s.Get(ctx, userID, resultID)
 }
 
 // Delete soft-deletes a memory.

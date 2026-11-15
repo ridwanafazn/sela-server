@@ -618,6 +618,9 @@ paths:
       tags: [Memories]
       operationId: submitMemoryFeedback
       summary: Confirm, correct, or reject a memory
+      description: |
+        Correcting a memory's content creates a replacement memory and marks
+        the original as superseded, preserving provenance and history.
       requestBody:
         required: true
         content:
@@ -1429,6 +1432,12 @@ components:
               type: array
               items:
                 $ref: "#/components/schemas/MemorySource"
+            conflicts_with:
+              type: array
+              description: IDs of memories that contradict this memory.
+              items:
+                type: string
+                format: uuid
 
     MemoryResponse:
       type: object

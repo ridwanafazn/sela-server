@@ -385,6 +385,34 @@ func TestPhase2SchemaConstraints(t *testing.T) {
 	)
 	requirePgError(t, err, "23514", "memory_sources_one_source_check")
 
+	conflictingMemoryID := uuid.NewString()
+	exec(t, db,
+		`INSERT INTO personal_memories (id, user_id, content, confidence, source_count)
+		 VALUES ($1, $2, 'The user dislikes concise answers.', 0.6, 0)`,
+		conflictingMemoryID, userID,
+	)
+	exec(t, db,
+		`INSERT INTO memory_conflicts (id, memory_id, conflicting_memory_id)
+		 VALUES ($1, $2, $3)`,
+		uuid.NewString(), memoryID, conflictingMemoryID,
+	)
+	_, err = db.SQL.ExecContext(ctx,
+		`INSERT INTO memory_conflicts (id, memory_id, conflicting_memory_id)
+		 VALUES ($1, $2, $3)`,
+		uuid.NewString(), memoryID, conflictingMemoryID,
+	)
+	requirePgError(t, err, "23505", "memory_conflicts_pair_key")
+	_, err = db.SQL.ExecContext(ctx,
+		`INSERT INTO memory_conflicts (id, memory_id, conflicting_memory_id)
+		 VALUES ($1, $2, $3)`,
+		uuid.NewString(), memoryID, memoryID,
+	)
+	requirePgError(t, err, "23514", "memory_conflicts_distinct_check")
+	assertIndexesExist(t, db, "memory_conflicts", []string{
+		"memory_conflicts_pair_key",
+		"memory_conflicts_conflicting_memory_id_idx",
+	})
+
 	insightID := uuid.NewString()
 	exec(t, db,
 		`INSERT INTO insights

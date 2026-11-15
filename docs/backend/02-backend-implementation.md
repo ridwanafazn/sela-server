@@ -274,6 +274,10 @@ Initial job types:
 | `account.delete` | Purge user-owned data after account deletion |
 | `data.cleanup` | Perform eligible cleanup |
 
+Changing the embedding model or memory extraction prompt requires re-enqueuing
+derived work. Run `make backfill` and then let the worker process the jobs. The
+backfill command is idempotent per model and prompt version.
+
 Job lifecycle:
 
 ```text

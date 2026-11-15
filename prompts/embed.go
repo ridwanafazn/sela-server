@@ -16,5 +16,11 @@ const CompanionVersion = "companion/v1"
 //go:embed memory_extraction/v1.md
 var MemoryExtractionV1 string
 
+// MemoryExtractionV2 is the version 2 memory extraction system prompt. It
+// supports both journal entries and user messages.
+//
+//go:embed memory_extraction/v2.md
+var MemoryExtractionV2 string
+
 // MemoryExtractionVersion is recorded in extraction job metadata.
-const MemoryExtractionVersion = "memory_extraction/v1"
+const MemoryExtractionVersion = "memory_extraction/v2"

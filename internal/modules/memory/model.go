@@ -60,6 +60,23 @@ type JournalSource struct {
 	DeletedAt *time.Time `gorm:"column:deleted_at"`
 }
 
+// MessageSource is the eligible user message text used for extraction.
+type MessageSource struct {
+	ID                    string     `gorm:"column:id"`
+	UserID                string     `gorm:"column:user_id"`
+	ConversationID        string     `gorm:"column:conversation_id"`
+	Role                  string     `gorm:"column:role"`
+	Content               string     `gorm:"column:content"`
+	CreatedAt             time.Time  `gorm:"column:created_at"`
+	ConversationDeletedAt *time.Time `gorm:"column:conversation_deleted_at"`
+}
+
+// SourceRef identifies one provenance record.
+type SourceRef struct {
+	JournalID *string
+	MessageID *string
+}
+
 // View is the API representation of a memory.
 type View struct {
 	ID                 string     `json:"id"`
@@ -87,7 +104,8 @@ type SourceView struct {
 // Detail is a memory with its provenance.
 type Detail struct {
 	View
-	Sources []SourceView `json:"sources"`
+	Sources       []SourceView `json:"sources"`
+	ConflictsWith []string     `json:"conflicts_with"`
 }
 
 // Page is a page of memory views.

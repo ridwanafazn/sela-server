@@ -11,6 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 
 	"github.com/ridwanafazn/sela-server/internal/modules/ai"
 	"github.com/ridwanafazn/sela-server/internal/modules/job"
@@ -232,6 +233,140 @@ func TestEmbeddingPipelineAndHybridRetrieval(t *testing.T) {
 	}
 	if afterDelete != 0 {
 		t.Errorf("embeddings after delete = %d, want 0", afterDelete)
+	}
+}
+
+func TestVectorCandidatesFilterByEmbeddingModel(t *testing.T) {
+	router, db := newAPI(t, testConfig())
+	ctx := context.Background()
+	user := newTestUser(t, router)
+
+	entry := mustCreateJournal(t, router, user.AccessToken, map[string]any{
+		"content":    "I could not sleep well because of work.",
+		"entry_date": "2026-11-04",
+	})
+
+	repo := journal.NewRepository(db.Gorm)
+	embeddingService := journal.NewEmbeddingService(repo, ai.NewFakeEmbedding(768), "fake-embedding-768", 768, testLogger())
+	if err := embeddingService.ProcessJournal(ctx, entry.ID); err != nil {
+		t.Fatalf("process journal: %v", err)
+	}
+
+	var vector string
+	if err := db.SQL.QueryRowContext(ctx,
+		`SELECT embedding::text FROM journal_embeddings WHERE journal_id = $1 LIMIT 1`, entry.ID,
+	).Scan(&vector); err != nil {
+		t.Fatalf("load vector: %v", err)
+	}
+
+	current, err := repo.VectorCandidates(ctx, user.User.ID, vector, "fake-embedding-768", 10)
+	if err != nil {
+		t.Fatalf("current model candidates: %v", err)
+	}
+	if len(current) != 1 || current[0].JournalID != entry.ID {
+		t.Fatalf("current model candidates = %+v, want the journal", current)
+	}
+
+	if _, err := db.SQL.ExecContext(ctx,
+		`UPDATE journal_embeddings SET embedding_model = 'old-model' WHERE journal_id = $1`, entry.ID,
+	); err != nil {
+		t.Fatalf("update embedding model: %v", err)
+	}
+
+	current, err = repo.VectorCandidates(ctx, user.User.ID, vector, "fake-embedding-768", 10)
+	if err != nil {
+		t.Fatalf("current model candidates after switch: %v", err)
+	}
+	if len(current) != 0 {
+		t.Errorf("current model returned %d candidates from another model", len(current))
+	}
+
+	old, err := repo.VectorCandidates(ctx, user.User.ID, vector, "old-model", 10)
+	if err != nil {
+		t.Fatalf("old model candidates: %v", err)
+	}
+	if len(old) != 1 || old[0].JournalID != entry.ID {
+		t.Errorf("old model candidates = %+v, want the journal", old)
+	}
+}
+
+func TestBackfillJobVariantsAreModelScoped(t *testing.T) {
+	router, db := newAPI(t, testConfig())
+	ctx := context.Background()
+	user := newTestUser(t, router)
+
+	entry := mustCreateJournal(t, router, user.AccessToken, map[string]any{
+		"content":    "Backfill target content.",
+		"entry_date": "2026-11-03",
+	})
+	if _, err := db.SQL.ExecContext(ctx,
+		`DELETE FROM scheduled_jobs WHERE user_id = $1`, user.User.ID,
+	); err != nil {
+		t.Fatalf("clear jobs: %v", err)
+	}
+
+	queue := job.NewQueue(db.Gorm)
+	hash := journal.ContentHash(entry.Content)
+	now := time.Now().UTC()
+
+	enqueue := func(model string) {
+		t.Helper()
+		if err := db.Gorm.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			return queue.EnqueueJournalEmbeddingForModel(ctx, tx, user.User.ID, entry.ID, hash, model, now)
+		}); err != nil {
+			t.Fatalf("enqueue model %s: %v", model, err)
+		}
+	}
+
+	enqueue("model-a")
+	enqueue("model-a")
+	enqueue("model-b")
+
+	var count int
+	if err := db.SQL.QueryRowContext(ctx,
+		`SELECT count(*) FROM scheduled_jobs
+		 WHERE user_id = $1 AND job_type = $2 AND payload->>'journal_id' = $3`,
+		user.User.ID, job.TypeJournalEmbedding, entry.ID,
+	).Scan(&count); err != nil {
+		t.Fatalf("count backfill jobs: %v", err)
+	}
+	if count != 2 {
+		t.Errorf("backfill jobs = %d, want 2 model-scoped jobs", count)
+	}
+}
+
+func TestStaleJobWithExhaustedAttemptsFails(t *testing.T) {
+	_, db := newAPI(t, testConfig())
+	ctx := context.Background()
+
+	jobID := uuid.NewString()
+	if _, err := db.SQL.ExecContext(ctx,
+		`INSERT INTO scheduled_jobs
+		 (id, job_type, status, attempts, max_attempts, run_at, locked_at, locked_by)
+		 VALUES ($1, 'test.stale', 'processing', 3, 3, now(), now() - interval '20 minutes', 'dead-worker')`,
+		jobID,
+	); err != nil {
+		t.Fatalf("insert stale job: %v", err)
+	}
+
+	queue := job.NewQueue(db.Gorm)
+	claimed, err := queue.Claim(ctx, "test-worker")
+	if err != nil {
+		t.Fatalf("claim: %v", err)
+	}
+	if claimed != nil {
+		t.Fatalf("claimed stale exhausted job %s", claimed.ID)
+	}
+
+	var status string
+	var attempts int
+	if err := db.SQL.QueryRowContext(ctx,
+		`SELECT status, attempts FROM scheduled_jobs WHERE id = $1`, jobID,
+	).Scan(&status, &attempts); err != nil {
+		t.Fatalf("load stale job: %v", err)
+	}
+	if status != job.StatusFailed || attempts != 3 {
+		t.Errorf("stale job = (%s, %d), want (failed, 3)", status, attempts)
 	}
 }
 

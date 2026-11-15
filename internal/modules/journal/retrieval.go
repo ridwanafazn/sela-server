@@ -204,7 +204,7 @@ func (s *RetrievalService) vectorCandidates(ctx context.Context, userID, query s
 		return nil, ai.ErrDimensionMismatch
 	}
 
-	return s.repo.VectorCandidates(ctx, userID, vectorString(response.Embeddings[0]), 30)
+	return s.repo.VectorCandidates(ctx, userID, vectorString(response.Embeddings[0]), s.model, 30)
 }
 
 // buildTextQuery converts a natural-language message into an OR tsquery so a

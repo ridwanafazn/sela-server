@@ -12,6 +12,7 @@ import (
 
 	"gorm.io/gorm"
 
+	"github.com/ridwanafazn/sela-server/internal/modules/memory"
 	"github.com/ridwanafazn/sela-server/internal/shared/apierrors"
 	"github.com/ridwanafazn/sela-server/internal/shared/ids"
 )
@@ -127,7 +128,7 @@ func (s *Service) Create(ctx context.Context, userID, idempotencyKey string, inp
 			return err
 		}
 		if journal.Status == StatusActive && s.jobs != nil {
-			hash := contentHash(journal.Content)
+			hash := ContentHash(journal.Content)
 			if err := s.jobs.EnqueueJournalEmbedding(ctx, tx, userID, journal.ID, hash, now); err != nil {
 				return err
 			}
@@ -269,9 +270,14 @@ func (s *Service) Update(ctx context.Context, userID, journalID string, ifMatch 
 		if err := s.repo.SaveTx(tx, entry); err != nil {
 			return err
 		}
+		if previousStatus != entry.Status {
+			if err := memory.ReconcileJournalSourcesTx(ctx, tx, userID, entry.ID, entry.UpdatedAt); err != nil {
+				return err
+			}
+		}
 		if entry.Status == StatusActive && s.jobs != nil &&
 			(entry.Content != previousContent || previousStatus != StatusActive) {
-			hash := contentHash(entry.Content)
+			hash := ContentHash(entry.Content)
 			if err := s.jobs.EnqueueJournalEmbedding(ctx, tx, userID, entry.ID, hash, entry.UpdatedAt); err != nil {
 				return err
 			}
@@ -309,7 +315,7 @@ func (s *Service) Delete(ctx context.Context, userID, journalID string, ifMatch 
 			return err
 		}
 		now := s.now().UTC()
-		if err := s.repo.DowngradeMemoriesForDeletedJournalTx(tx, userID, journalID, now); err != nil {
+		if err := memory.ReconcileJournalSourcesTx(ctx, tx, userID, journalID, now); err != nil {
 			return err
 		}
 		return s.repo.DeleteEmbeddingsTx(tx, journalID)
@@ -438,7 +444,9 @@ func validStatus(status string) bool {
 	return status == StatusDraft || status == StatusActive
 }
 
-func contentHash(content string) string {
+// ContentHash returns the canonical content hash used for derived-work job
+// idempotency.
+func ContentHash(content string) string {
 	sum := sha256.Sum256([]byte(content))
 	return hex.EncodeToString(sum[:])
 }

@@ -11,6 +11,8 @@ import (
 	"syscall"
 	"time"
 
+	"gorm.io/gorm"
+
 	"github.com/ridwanafazn/sela-server/internal/config"
 	"github.com/ridwanafazn/sela-server/internal/modules/ai"
 	"github.com/ridwanafazn/sela-server/internal/modules/job"
@@ -18,7 +20,10 @@ import (
 	"github.com/ridwanafazn/sela-server/internal/modules/memory"
 	"github.com/ridwanafazn/sela-server/internal/platform/database"
 	"github.com/ridwanafazn/sela-server/internal/platform/logger"
+	"github.com/ridwanafazn/sela-server/prompts"
 )
+
+const backfillPageSize = 200
 
 func main() {
 	if err := run(); err != nil {
@@ -29,6 +34,7 @@ func main() {
 
 func run() error {
 	once := flag.Bool("once", false, "process the currently available jobs and exit")
+	backfill := flag.Bool("backfill", false, "enqueue embedding and memory extraction jobs for all active journals, then exit")
 	flag.Parse()
 
 	cfg, err := config.Load()
@@ -48,6 +54,10 @@ func run() error {
 	defer func() {
 		_ = db.Close()
 	}()
+
+	if *backfill {
+		return runBackfill(ctx, cfg, db, log)
+	}
 
 	embeddings, err := ai.NewEmbedding(ctx, cfg.AI)
 	if err != nil {
@@ -100,6 +110,18 @@ func run() error {
 			}
 			return extractionService.ProcessJournal(ctx, payload.JournalID)
 		}),
+		job.TypeMessageMemoryExtraction: job.HandlerFunc(func(ctx context.Context, claimed *job.Job) error {
+			var payload struct {
+				MessageID string `json:"message_id"`
+			}
+			if err := json.Unmarshal(claimed.Payload, &payload); err != nil {
+				return fmt.Errorf("%w: decode message extraction payload: %v", ai.ErrInvalidRequest, err)
+			}
+			if payload.MessageID == "" {
+				return fmt.Errorf("%w: message extraction payload is missing message_id", ai.ErrInvalidRequest)
+			}
+			return extractionService.ProcessMessage(ctx, payload.MessageID)
+		}),
 	}
 
 	hostname, _ := os.Hostname()
@@ -110,6 +132,7 @@ func run() error {
 		slog.String("worker_id", workerID),
 		slog.String("embedding_provider", cfg.AI.EmbeddingProvider),
 		slog.String("embedding_model", embeddingModel),
+		slog.String("memory_prompt_version", prompts.MemoryExtractionVersion),
 	)
 
 	if *once {
@@ -125,4 +148,50 @@ func run() error {
 	}
 
 	return worker.Run(ctx)
+}
+
+func runBackfill(ctx context.Context, cfg *config.Config, db *database.DB, log *slog.Logger) error {
+	repository := journal.NewRepository(db.Gorm)
+	queue := job.NewQueue(db.Gorm)
+	embeddingModel := cfg.AI.EmbeddingModelName()
+	now := time.Now().UTC()
+
+	var afterID string
+	var journals int
+	for {
+		targets, err := repository.ActiveForBackfill(ctx, afterID, backfillPageSize)
+		if err != nil {
+			return err
+		}
+		if len(targets) == 0 {
+			break
+		}
+
+		for _, target := range targets {
+			hash := journal.ContentHash(target.Content)
+			err := db.Gorm.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+				if err := queue.EnqueueJournalEmbeddingForModel(
+					ctx, tx, target.UserID, target.ID, hash, embeddingModel, now,
+				); err != nil {
+					return err
+				}
+				return queue.EnqueueJournalMemoryExtractionForVersion(
+					ctx, tx, target.UserID, target.ID, hash, prompts.MemoryExtractionVersion, now,
+				)
+			})
+			if err != nil {
+				return err
+			}
+			journals++
+		}
+
+		afterID = targets[len(targets)-1].ID
+	}
+
+	log.Info("backfill jobs enqueued",
+		slog.Int("journals", journals),
+		slog.String("embedding_model", embeddingModel),
+		slog.String("memory_prompt_version", prompts.MemoryExtractionVersion),
+	)
+	return nil
 }
