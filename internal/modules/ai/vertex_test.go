@@ -25,12 +25,22 @@ func TestVertexEmbedding(t *testing.T) {
 			Instances []struct {
 				Content string `json:"content"`
 			} `json:"instances"`
+			Parameters struct {
+				OutputDimensionality int  `json:"outputDimensionality"`
+				AutoTruncate         bool `json:"autoTruncate"`
+			} `json:"parameters"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 			t.Fatalf("decode request: %v", err)
 		}
 		if len(request.Instances) != 2 {
 			t.Errorf("instances = %d, want 2", len(request.Instances))
+		}
+		if request.Parameters.OutputDimensionality != 3 {
+			t.Errorf("outputDimensionality = %d, want 3", request.Parameters.OutputDimensionality)
+		}
+		if !request.Parameters.AutoTruncate {
+			t.Error("autoTruncate = false, want true")
 		}
 
 		_ = json.NewEncoder(w).Encode(map[string]any{

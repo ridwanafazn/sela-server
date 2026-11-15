@@ -3,6 +3,11 @@
 - Starts after: backend `v0.2.0`
 - Goal: move from a frozen local backend to a real-provider staging system and
   an online-first mobile MVP.
+- Selected architecture: Cloud Run (API) + Neon (PostgreSQL/pgvector) + Vertex
+  AI (`gemini-embedding-001`, 768 dimensions) + OpenRouter
+  (`deepseek/deepseek-v4.1-flash-1017`).
+- Target device: Samsung Galaxy A35, Android.
+- Deployment guide: `docs/backend/12-cloud-run-neon-vertex-setup.md`.
 - This phase does not start until the required inputs below are available.
 
 ## Ordered workstreams

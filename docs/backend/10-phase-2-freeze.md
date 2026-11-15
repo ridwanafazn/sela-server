@@ -60,7 +60,8 @@ The ordered pre-beta workstreams and required inputs are tracked in
 
 1. Embedding decision:
    - local Ollama with `nomic-embed-text`, or
-   - Vertex AI project, region, and service account / ADC.
+   - Vertex AI project, region, and service account / ADC using
+     `gemini-embedding-001` at 768 dimensions.
 2. Staging database:
    - Neon project and pooled + direct connection strings, or an equivalent
      PostgreSQL with pgvector.

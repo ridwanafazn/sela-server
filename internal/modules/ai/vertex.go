@@ -95,7 +95,14 @@ func (v *VertexEmbedding) Embed(ctx context.Context, request EmbeddingRequest) (
 			inputTokens += approximateTokens(text)
 		}
 
-		body, err := v.post(ctx, endpoint, map[string]any{"instances": instances})
+		payload := map[string]any{"instances": instances}
+		if v.dimension > 0 {
+			payload["parameters"] = map[string]any{
+				"outputDimensionality": v.dimension,
+				"autoTruncate":         true,
+			}
+		}
+		body, err := v.post(ctx, endpoint, payload)
 		if err != nil {
 			return nil, err
 		}

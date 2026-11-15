@@ -2,6 +2,15 @@
 
 All notable backend changes are recorded here.
 
+## v0.2.1 — Vertex embedding compatibility — 2026-11-15
+
+### Fixed
+
+- Vertex embedding requests now send `parameters.outputDimensionality` and
+  `autoTruncate`, allowing `gemini-embedding-001` to produce the locked
+  768-dimensional vectors.
+- The default Vertex embedding model is now `gemini-embedding-001`.
+
 ## v0.2.0 — Phase 2 backend frozen — 2026-11-15
 
 Phase 2 backend is complete and frozen. The mobile client and staging

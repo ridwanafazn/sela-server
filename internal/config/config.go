@@ -310,7 +310,7 @@ func load(lookup func(string) (string, bool)) (*Config, error) {
 		EmbeddingTimeout:        durationValue(lookup, "EMBEDDING_TIMEOUT", 30*time.Second, &problems),
 		VertexProjectID:         strings.TrimSpace(stringValue(lookup, "VERTEX_PROJECT_ID", "")),
 		VertexRegion:            strings.TrimSpace(stringValue(lookup, "VERTEX_REGION", "asia-southeast1")),
-		VertexEmbeddingModel:    stringValue(lookup, "VERTEX_EMBEDDING_MODEL", "text-embedding-004"),
+		VertexEmbeddingModel:    stringValue(lookup, "VERTEX_EMBEDDING_MODEL", "gemini-embedding-001"),
 		VertexBaseURL:           strings.TrimSpace(stringValue(lookup, "VERTEX_BASE_URL", "")),
 		InputCostPerMillion:     floatValue(lookup, "AI_INPUT_COST_PER_MILLION", 0, &problems),
 		OutputCostPerMillion:    floatValue(lookup, "AI_OUTPUT_COST_PER_MILLION", 0, &problems),
