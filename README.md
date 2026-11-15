@@ -25,6 +25,7 @@ Backend Phase 2 is complete and frozen at `v0.2.0`.
 - Database schema: migration version `16`.
 - Release notes: `CHANGELOG.md`.
 - Freeze checklist and next inputs: `docs/backend/10-phase-2-freeze.md`.
+- Active focus phase: `docs/backend/11-focus-phase.md`.
 
 The mobile application, staging deployment, real embedding provider, and Phase 3
 beta hardening are separate deliverables.

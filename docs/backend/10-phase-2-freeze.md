@@ -53,6 +53,9 @@ deployment are separate deliverables and are not included in this release.
 
 ## Required inputs for the next focus
 
+The ordered pre-beta workstreams and required inputs are tracked in
+`docs/backend/11-focus-phase.md`.
+
 ### Immediate
 
 1. Embedding decision:
