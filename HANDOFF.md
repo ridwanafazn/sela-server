@@ -34,7 +34,9 @@ active.
 
 ## Mobile Phase 1 (2026-11-16)
 
-- Repository: `C:\Users\Ridwan\Git-v2\sela-mobile` (local commit `964cb61`).
+- Repository: `C:\Users\Ridwan\Git-v2\sela-mobile` (local commit `6295147`).
+- Visual direction: Dawn Paper — warm gradients, soft orbs, floating pill
+  navigation, Plus Jakarta Sans + Lora.
 - Phase 1 walking skeleton code is complete:
   GoRouter, auth/session, journal CRUD, search and filters, server-side draft
   autosave, unsaved-changes guard, onboarding, Companion chat, profile, and
