@@ -259,7 +259,7 @@ gcloud run jobs execute sela-worker --region=asia-southeast1 --project=sela-5138
 
 ```powershell
 $api = (gcloud run services describe sela-api --region=asia-southeast1 --project=sela-513807 --format="value(status.url)") + "/api/v1"
-.\bin\local-smoke.ps1 -BaseUrl $api -WorkerMode GCloud -JournalCount 3
+.\scripts\local-smoke.ps1 -BaseUrl $api -WorkerMode GCloud -JournalCount 3
 ```
 
 The script creates a synthetic user, three journals, a conversation, an

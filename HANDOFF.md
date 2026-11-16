@@ -8,7 +8,8 @@ Last updated: 2026-11-16 (local verification session)
 - Branch: `main`, synced with `origin/main` before local commits
 - Latest local commits:
   - `f4d0da1` — staging runbook and Neon free-tier notes
-  - this handoff commit
+  - `ada9f8d` — local verification handoff
+  - a local test-harness commit on top
 - Release tags:
   - `v0.2.0` — Phase 2 backend freeze
   - `v0.2.1` — Vertex 768-dimensional embedding compatibility
@@ -33,21 +34,13 @@ active.
 
 ## Environment status
 
-At the time of this update, local verification services are running:
+All project dev services are stopped at handoff:
 
-- `sela-server-postgres-1` on port `5432`.
-- `sela-api-smoke` on port `8080` with `APP_ENV=production` and fake AI
-  providers. This container is disposable.
-
-Stop them with:
-
-```powershell
-docker rm -f sela-api-smoke
-docker compose down
-```
-
-The PostgreSQL data volume is retained:
-`sela-server_postgres-data`.
+- `sela-api-smoke` and `sela-mock-llm` containers removed.
+- `sela-server-postgres-1` stopped and removed via `docker compose down`.
+- No process listening on ports `8080`, `8090`, `5432`, or `9090`.
+- PostgreSQL data volume retained:
+  `sela-server_postgres-data`
 
 To resume:
 
@@ -83,15 +76,30 @@ Completed against the frozen Phase 2 code:
 - `gofmt -l .` clean; `go vet ./...` clean.
 - Migrations `up` -> `down -all` -> `up` on a disposable database: version 16.
 - Container image `sela-server:v0.2.1-local` built.
-- Container smoke test `bin/local-smoke.ps1`:
+- Container smoke test `scripts/local-smoke.ps1`:
   health, register, journals, worker, memories, conversation, companion,
   insight accept, account delete, purge, login blocked.
+- Mock OpenAI-compatible container test (`scripts/mock-llm.py`, the same
+  adapter path used for OpenRouter): memory candidate created, insight
+  completed with three evidence sources, account purge completed.
 - API logs contain no journal or message content.
 - Neon schema dump (53 KB) restored locally: version 16, 18 tables,
   pgvector 0.8.7.
 
-The insight job fails with the fake provider because it returns a fixed memory
-JSON payload; the integration suite covers the real insight path.
+With the built-in fake provider, the insight job fails because it returns a
+fixed memory JSON payload. The mock provider and the integration suite cover the
+real insight path.
+
+Run the mock provider on the compose network when needed:
+
+```powershell
+docker run -d --name sela-mock-llm --network sela-server_default `
+  -v "${PWD}/scripts:/app:ro" python:3.13-alpine python /app/mock-llm.py
+```
+
+Then start the API with `AI_PROVIDER=openai`,
+`AI_BASE_URL=http://sela-mock-llm:9090/v1`, `AI_API_KEY=test`, and
+`AI_MODEL=mock-model`.
 
 ## Local configuration
 
@@ -180,7 +188,7 @@ Required staging secrets:
 3. Fill `AI_API_KEY` and `VERTEX_PROJECT_ID` in `.env.staging`.
 4. Execute `docs/backend/13-staging-runbook.md`.
 5. Run the staging smoke test with 3 synthetic entries:
-   `bin/local-smoke.ps1 -BaseUrl <staging>/api/v1 -WorkerMode GCloud -JournalCount 3`.
+   `scripts/local-smoke.ps1 -BaseUrl <staging>/api/v1 -WorkerMode GCloud -JournalCount 3`.
 6. Verify logs, backup/restore, and account purge.
 7. Review crisis resources before entering real journal data.
 8. Build the Android Flutter MVP against the staging API.
