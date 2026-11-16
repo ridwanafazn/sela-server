@@ -282,6 +282,24 @@ job.
 Start with Option A if you want immediate processing. Move to Option B if the
 always-on cost matters.
 
+### Pre-beta cost constraint (Neon Free)
+
+Neon Free includes 100 CU-hours per month on a 0.25 CU compute, which is about
+400 active hours. A worker that polls every 1–2 minutes keeps the database
+awake around the clock (about 730 hours, or 182 CU-hours per month), so Neon
+suspends the compute mid-month.
+
+For pre-beta staging, run the worker on demand instead of scheduling it:
+
+```bash
+gcloud run jobs execute sela-worker --region="$REGION" --wait
+```
+
+Enable Cloud Scheduler only for limited testing windows, or upgrade the Neon
+plan before running an always-on worker. A $1 monthly spend cap on Cloud Run
+and another on Vertex AI limits staging exposure; spend caps pause new usage
+at 100% but are not instantaneous, so small overages remain possible.
+
 ## 9. OpenRouter privacy
 
 For real journal content:
