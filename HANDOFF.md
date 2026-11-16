@@ -32,6 +32,22 @@ The immediate blocker is billing for `sela-513807`. The staging runbook
 (`docs/backend/13-staging-runbook.md`) is ready to execute once billing is
 active.
 
+## Mobile Phase 1 (2026-11-16)
+
+- Repository: `C:\Users\Ridwan\Git-v2\sela-mobile` (local commit `964cb61`).
+- Phase 1 walking skeleton code is complete:
+  GoRouter, auth/session, journal CRUD, search and filters, server-side draft
+  autosave, unsaved-changes guard, onboarding, Companion chat, profile, and
+  re-authenticated account deletion.
+- Verification: `flutter analyze` clean, `flutter test` 12 passing,
+  `flutter build web` passing, authenticated flow captured at 390x844.
+- Pending: staging deployment (billing), Android emulator/device validation,
+  Insights and memory (Phase 2), offline L1 (Phase 3).
+- Authoritative mobile docs:
+  `C:\Users\Ridwan\Documents\Default Project\sela-documentation\sela-mobile\docs\flutter`.
+- The docs package ships OpenAPI 1.2.0; the backend repository is 1.3.0.
+  Use the repository contract until the documentation is reconciled.
+
 ## Environment status
 
 All project dev services are stopped at handoff:
@@ -195,7 +211,8 @@ Required staging secrets:
 
 ## Known gaps
 
-- Mobile app is a separate repository and not started.
+- Mobile app is in `C:\Users\Ridwan\Git-v2\sela-mobile`. Phase 1 code is
+  complete, but staging and Android-device validation are pending.
 - Staging is not deployed.
 - `GET /journal-changes` and offline-first sync are Phase 3.
 - Metrics dashboards, alerts, backup automation, and incident runbook are Phase 3.
@@ -220,3 +237,5 @@ Required staging secrets:
 - `docs/backend/09-safety-evaluation-cost.md`
 - `docs/shared/openapi.yaml`
 - `docs/shared/04-database-design.md`
+- External mobile docs:
+  `C:\Users\Ridwan\Documents\Default Project\sela-documentation\sela-mobile\docs\flutter`
