@@ -1,10 +1,11 @@
 # SELA AI System Design
 
-Version: 1.2
+Version: 1.3
 
 > Scope note (2026-11-21): scheduled weekly/monthly insights are MVP. Per-entry
-> journal analysis is post-MVP. Sensitive memory requires explicit consent. See
-> `10-product-vision-decisions.md`.
+> journal analysis is post-MVP; its backend is implemented in Phase 4A and
+> mobile controls remain pending. Sensitive memory requires explicit consent.
+> See `10-product-vision-decisions.md`.
 
 ## 1. Purpose
 
@@ -31,7 +32,7 @@ Initial capabilities:
 5. On-demand insight generation.
 6. Scheduled insight generation (MVP; user opt-in).
 7. Conversation summarization where useful.
-8. Per-entry journal analysis (post-MVP).
+8. Per-entry journal analysis (post-MVP; backend implemented).
 
 ## 3. Architecture
 
@@ -310,9 +311,12 @@ Scheduled insights are MVP. On-demand and scheduled insights share the same
 evidence, safety, budget, and ownership rules. Scheduled generation must be
 opt-in, timezone-aware, idempotent, cost-controlled, and easy to disable.
 
-Per-entry journal analysis is post-MVP. When delivered, it must be tied to one
-owned journal entry, stored separately from the original entry, and use the same
-evidence and uncertainty standards as insights.
+Per-entry journal analysis is post-MVP and its backend is implemented. It is
+tied to one owned journal entry, stored separately from the original entry, and
+uses the same evidence and uncertainty standards as insights. Only the requested
+entry is sent to the provider. Analysis requests are asynchronous, idempotent,
+budgeted, and rate-limited; users can inspect and delete the stored analysis,
+and a stale marker appears after the entry changes.
 
 ## 12. Communication Style
 
@@ -483,7 +487,8 @@ The following decisions are locked for the MVP and are detailed in `docs/backend
   and easy to disable.
 - A scheduled job may complete with `budget_exhausted` when the user or global
   AI budget is exhausted.
-- Per-entry journal analysis is post-MVP.
+- Per-entry journal analysis is post-MVP; its backend is implemented with one
+  stored analysis per journal version and no cross-entry retrieval.
 
 ### Sensitive Memory
 

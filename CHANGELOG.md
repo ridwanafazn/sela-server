@@ -47,6 +47,16 @@ All notable backend changes are recorded here.
   - free/premium entitlement state,
   - manual entitlement support commands,
   - file/SMTP email delivery abstraction.
+- Phase 4A per-entry journal analysis backend:
+  - migration `19` with `journal_analyses`,
+  - `POST`, `GET`, and `DELETE /journals/{journalId}/analysis`,
+  - `GET /journal-analysis-jobs/{jobId}`,
+  - idempotent asynchronous `journal.analysis` jobs,
+  - one stored analysis per journal version,
+  - stale marker after journal edits,
+  - `journal_analysis/v1` prompt,
+  - analysis rate limits, budget checks, usage metadata, and export,
+  - analysis deletion with pending-job cancellation.
 
 ### Changed
 
@@ -66,6 +76,7 @@ All notable backend changes are recorded here.
   dimensions.
 - Memory vocabulary is clarified: internal `superseded`/`deleted`; user-facing
   "digantikan"/"dihapus"; no "archived" without an archive feature.
+- OpenAPI contract advanced to `1.6.0` for per-entry journal analysis.
 
 ### Documentation
 

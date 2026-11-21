@@ -137,6 +137,8 @@ func testConfig() *config.Config {
 			PasswordResetPerHourAccount:  1000,
 			EmailVerificationPerHourUser: 1000,
 			ExportPerHourUser:            1000,
+			AnalysisPerHour:              1000,
+			AnalysisPerDay:               1000,
 		},
 		AI: config.AI{
 			Provider:           "fake",

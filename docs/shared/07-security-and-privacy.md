@@ -1,9 +1,10 @@
 # SELA Security and Privacy
 
-Version: 1.3
+Version: 1.4
 
 > Scope note (2026-11-21): sensitive memory requires explicit, recorded, and
-> revocable user consent. The default remains skip. See
+> revocable user consent. The default remains skip. Per-entry journal analysis
+> uses only the requested entry and is stored separately. See
 > `10-product-vision-decisions.md`.
 
 ## 1. Security Objective
@@ -96,6 +97,10 @@ Before sending user content to an external AI provider:
 - Use contractual and configuration protections where available.
 - Avoid sending unrelated journal content.
 
+Per-entry analysis sends only the requested entry. It does not retrieve
+memories, conversations, or other journals. The provider response is validated
+and stored separately from the original entry.
+
 Provider selection must consider privacy, cost, reliability, and quality.
 
 ## 7. Prompt Injection
@@ -143,11 +148,11 @@ Users should be able to:
 - Delete memories.
 - Delete journals.
 - Delete conversations.
-- View and revoke sessions (current session in MVP; full session inventory and
-  revoke-all are post-MVP).
+- View and revoke sessions.
 - Delete their account.
 - Export their data without credential material.
 - Inspect adult confirmation and legal acceptance state.
+- Request, inspect, and delete a per-entry journal analysis.
 
 The system must explain relevant consequences of deletion.
 
@@ -162,6 +167,7 @@ Account deletion must account for:
 - Memories.
 - Insights.
 - Insight feedback.
+- Journal analyses.
 - Embeddings.
 - Sessions.
 - Idempotency records.

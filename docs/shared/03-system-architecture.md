@@ -1,11 +1,12 @@
 # SELA System Architecture
 
-Version: 1.1
+Version: 1.2
 
 > Scope note (2026-11-21): weekly and monthly scheduled insights are MVP.
 > Per-entry journal analysis is a core product capability with post-MVP
-> delivery. Sensitive memory requires explicit consent before storage and
-> retrieval. See `10-product-vision-decisions.md`.
+> delivery; its backend is implemented in Phase 4A. Sensitive memory requires
+> explicit consent before storage and retrieval. See
+> `10-product-vision-decisions.md`.
 
 ## 1. Architecture Overview
 
@@ -228,8 +229,11 @@ Embeddings are disposable derived data and can be regenerated from eligible sour
    `insufficient_evidence`.
 5. The user can disable the schedule at any time.
 
-Per-entry journal analysis is post-MVP. The MVP uses Companion and period-based
-insights as the journal reflection path.
+Per-entry journal analysis is post-MVP and its backend is implemented. A
+request creates a durable `journal.analysis` job. The worker loads only the
+owned entry, checks its version and publication state, calls the model, stores
+the result separately, and returns an explicit outcome. The MVP reflection path
+remains Companion and period-based insights.
 
 ## 7. Retrieval Architecture
 

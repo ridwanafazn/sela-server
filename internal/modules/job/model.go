@@ -21,6 +21,7 @@ const (
 	TypeJournalMemoryExtraction = "journal.memory_extraction"
 	TypeMessageMemoryExtraction = "message.memory_extraction"
 	TypeInsightGenerate         = "insight.generate"
+	TypeJournalAnalysis         = "journal.analysis"
 	TypeAccountDelete           = "account.delete"
 )
 

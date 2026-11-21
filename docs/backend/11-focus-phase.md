@@ -12,8 +12,10 @@
 
 ## Session status at handoff
 
-The B1 backend addendum is implemented and tested locally. Staging deployment is
-the next action. See `HANDOFF.md`.
+The B1 addendum, local staging path, beta hardening, offline backend, and
+pre-public backend are complete. Phase 4A per-entry journal analysis is now
+implemented on the backend. GCP deployment, mobile delivery, payment provider
+work, legal review, and external security review remain. See `HANDOFF.md`.
 
 The pre-beta sequence is updated by the 2026-11-21 product vision decisions:
 
@@ -24,8 +26,9 @@ The pre-beta sequence is updated by the 2026-11-21 product vision decisions:
 5. Beta hardening.
 6. Offline-first journaling.
 
-Journal analysis remains a core capability with post-MVP delivery. It is not in
-the pre-beta sequence.
+Journal analysis remains a core capability with post-MVP delivery. Its backend
+is now implemented as Phase 4A after the pre-public gate. See
+`docs/backend/19-journal-analysis.md`. It is not part of the pre-beta sequence.
 
 ## MVP scope addendum — 2026-11-21
 
@@ -268,6 +271,32 @@ External gates:
 - Crisis-resource review.
 - External penetration test.
 
+### 7. Phase 4A - per-entry journal analysis
+
+Status: backend implemented. Mobile inspection and request controls remain.
+See `docs/backend/19-journal-analysis.md`.
+
+Completed:
+
+- Migration `19` with `journal_analyses`.
+- `POST /journals/{journalId}/analysis`.
+- `GET /journals/{journalId}/analysis`.
+- `DELETE /journals/{journalId}/analysis`.
+- `GET /journal-analysis-jobs/{jobId}`.
+- Idempotent asynchronous job with `analysis_created`,
+  `insufficient_evidence`, `journal_changed`, and `budget_exhausted` outcomes.
+- One analysis per journal version, separate from the journal.
+- Stale marker when the journal has changed.
+- Analysis prompt `journal_analysis/v1`.
+- Budget, rate-limit, usage, export, deletion, and ownership coverage.
+- Unit and integration tests.
+
+Remaining:
+
+- Mobile request, loading, inspection, stale-state, and delete controls.
+- Analysis history or comparison UI if product evidence supports it.
+- Premium entitlement enforcement if analysis becomes a paid capability.
+
 ## Required inputs
 
 ### Immediate
@@ -295,6 +324,8 @@ External gates:
 - Admin/support tooling scope for entitlement and account operations.
 - Final terms, privacy policy, and age-assurance policy.
 - Client email-verification and password-reset screens or deep links.
+- Mobile per-entry analysis request, inspection, stale-state, and delete
+  screens.
 
 ### Operations
 

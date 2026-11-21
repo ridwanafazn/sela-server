@@ -237,6 +237,14 @@ func (r *Repository) Export(ctx context.Context, userID string) (map[string]any,
 			        FROM insight_schedules WHERE user_id = ?`,
 		},
 		{
+			name: "journal_analyses",
+			query: `SELECT id, journal_id, journal_version, summary, observation,
+			               interpretation, hypothesis, confidence, confidence_label,
+			               reflection_question, suggested_direction, evidence_note,
+			               model, prompt_version, created_at
+			        FROM journal_analyses WHERE user_id = ? ORDER BY created_at, id`,
+		},
+		{
 			name: "ai_usage_events",
 			query: `SELECT operation, provider, model, input_tokens, output_tokens,
 			               estimated_cost_usd, latency_ms, success, error_category, created_at

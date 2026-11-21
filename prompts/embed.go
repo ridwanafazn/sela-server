@@ -44,3 +44,11 @@ var InsightV2 string
 
 // InsightVersion is stored with generated insights and jobs.
 const InsightVersion = "insight/v2"
+
+// JournalAnalysisV1 is the per-entry journal analysis system prompt.
+//
+//go:embed journal_analysis/v1.md
+var JournalAnalysisV1 string
+
+// JournalAnalysisVersion is stored with generated journal analyses.
+const JournalAnalysisVersion = "journal_analysis/v1"

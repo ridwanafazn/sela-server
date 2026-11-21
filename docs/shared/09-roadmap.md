@@ -1,8 +1,9 @@
 # SELA Roadmap
 
-Version: 1.4
+Version: 1.5
 
-Status: Phase 0 complete; backend Phase 2 frozen; mobile Phase 1 code complete; pre-beta
+Status: Phase 0 complete; backend Phase 2 frozen; mobile Phase 1 code complete;
+pre-beta; Phase 4A journal analysis backend complete
 
 ## 1. Purpose
 
@@ -217,11 +218,23 @@ Exit criteria:
 
 Goal: add depth only when product evidence supports it.
 
+Status: Phase 4A (per-entry journal analysis) backend implemented on
+2026-11-21. See `docs/backend/19-journal-analysis.md`. Other candidates remain
+gated on product evidence.
+
+Implemented:
+
+- Per-entry journal analysis backend:
+  - asynchronous, idempotent request,
+  - one stored analysis per journal version,
+  - evidence and uncertainty fields,
+  - stale marker after edits,
+  - inspection and deletion,
+  - budget, rate-limit, usage, and export coverage.
+
 Candidates:
 
-- Per-entry journal analysis.
 - Privacy center and granular consent.
-- Data export.
 - Push notifications.
 - Encrypted read cache for journals.
 - Full offline-first for journals.
@@ -308,7 +321,8 @@ A phase does not expand silently. New work goes into the next phase unless it is
 - Authentication uses HS256 with rotating refresh tokens.
 - Account deletion is in the MVP.
 - Scheduled weekly and monthly insights are in the MVP.
-- Per-entry journal analysis is a core capability with post-MVP delivery.
+- Per-entry journal analysis is a core capability with post-MVP delivery. Its
+  backend is implemented; mobile controls remain pending.
 - Sensitive memory requires explicit consent; the default is skip.
 - Companion and insight prompt v2 are active. Deterministic gates pass; live
   model quality evaluation remains manual.

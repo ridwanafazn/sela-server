@@ -19,6 +19,7 @@ import (
 	"github.com/ridwanafazn/sela-server/internal/modules/insight"
 	"github.com/ridwanafazn/sela-server/internal/modules/job"
 	"github.com/ridwanafazn/sela-server/internal/modules/journal"
+	"github.com/ridwanafazn/sela-server/internal/modules/journalanalysis"
 	"github.com/ridwanafazn/sela-server/internal/modules/memory"
 	"github.com/ridwanafazn/sela-server/internal/platform/aiusage"
 	"github.com/ridwanafazn/sela-server/internal/platform/database"
@@ -133,6 +134,15 @@ func run() error {
 		usageService,
 		log,
 	)
+	analysisGeneration := journalanalysis.NewGenerationService(
+		journalanalysis.NewRepository(db.Gorm),
+		journal.NewRepository(db.Gorm),
+		llm,
+		cfg.AI.Model,
+		cfg.AI.Provider,
+		usageService,
+		log,
+	)
 	accountRepository := account.NewRepository(db.Gorm)
 
 	queue := job.NewQueue(db.Gorm)
@@ -187,6 +197,20 @@ func run() error {
 			}
 			return queue.SetResult(ctx, claimed.ID, result)
 		}),
+		job.TypeJournalAnalysis: job.HandlerFunc(func(ctx context.Context, claimed *job.Job) error {
+			if claimed.UserID == nil || *claimed.UserID == "" {
+				return fmt.Errorf("%w: journal analysis job is missing user_id", ai.ErrInvalidRequest)
+			}
+			var payload journalanalysis.JobPayload
+			if err := json.Unmarshal(claimed.Payload, &payload); err != nil {
+				return fmt.Errorf("%w: decode journal analysis payload: %v", ai.ErrInvalidRequest, err)
+			}
+			result, err := analysisGeneration.Process(ctx, claimed.ID, *claimed.UserID, payload)
+			if err != nil {
+				return err
+			}
+			return queue.SetResult(ctx, claimed.ID, result)
+		}),
 		job.TypeAccountDelete: job.HandlerFunc(func(ctx context.Context, claimed *job.Job) error {
 			if claimed.UserID == nil || *claimed.UserID == "" {
 				return fmt.Errorf("%w: account deletion job is missing user_id", ai.ErrInvalidRequest)
@@ -213,6 +237,7 @@ func run() error {
 		slog.String("embedding_model", embeddingModel),
 		slog.String("memory_prompt_version", prompts.MemoryExtractionVersion),
 		slog.String("insight_prompt_version", prompts.InsightVersion),
+		slog.String("journal_analysis_prompt_version", prompts.JournalAnalysisVersion),
 	)
 
 	if *once {

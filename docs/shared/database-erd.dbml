@@ -84,6 +84,33 @@ Table journals {
   Note: "status: draft | active. version increments on every update and powers If-Match optimistic concurrency. Only active entries are eligible for embeddings, memory extraction, and insights. Add a generated tsvector column and GIN index in the SQL migration."
 }
 
+Table journal_analyses {
+  id uuid [pk]
+  user_id uuid [not null]
+  journal_id uuid [not null]
+  journal_version integer [not null]
+  job_id uuid [not null, unique]
+  summary text [not null]
+  observation text [not null]
+  interpretation text [not null]
+  hypothesis text
+  confidence decimal(5,4) [not null]
+  confidence_label varchar(20) [not null]
+  reflection_question text [not null]
+  suggested_direction varchar(20) [not null]
+  evidence_note text [not null]
+  model varchar(100)
+  prompt_version varchar(50)
+  created_at timestamptz [not null]
+
+  indexes {
+    (journal_id, journal_version) [unique]
+    (user_id, journal_id, created_at)
+  }
+
+  Note: "One stored analysis per journal version, separate from the immutable journal. confidence_label: strong | moderate | limited. suggested_direction: improve | maintain | accept. Deleting a journal removes its analyses; account deletion cascades."
+}
+
 Table journal_embeddings {
   id uuid [pk]
   journal_id uuid [not null]

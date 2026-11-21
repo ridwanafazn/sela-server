@@ -21,8 +21,9 @@ Our philosophy:
 
 Backend Phase 2 is complete and frozen at `v0.2.0`.
 
-- API contract: OpenAPI `1.5.0`.
-- Database schema: migration version `18` (pre-beta and pre-public addenda).
+- API contract: OpenAPI `1.6.0`.
+- Database schema: migration version `19` (pre-beta, pre-public, and Phase 4A
+  addenda).
 - Release notes: `CHANGELOG.md`.
 - Session handoff: `HANDOFF.md`.
 - Staging validation: `docs/backend/14-staging-validation.md`.
@@ -30,6 +31,7 @@ Backend Phase 2 is complete and frozen at `v0.2.0`.
 - Beta hardening: `docs/backend/16-beta-hardening.md`.
 - Offline sync backend: `docs/backend/17-offline-sync.md`.
 - Pre-public backend: `docs/backend/18-prepublic.md`.
+- Per-entry journal analysis backend: `docs/backend/19-journal-analysis.md`.
 - Freeze checklist and next inputs: `docs/backend/10-phase-2-freeze.md`.
 - Active focus phase: `docs/backend/11-focus-phase.md`.
 
@@ -37,7 +39,8 @@ The 2026-11-21 product vision review added a post-freeze MVP scope addendum:
 
 - Weekly and monthly scheduled insights are MVP. The backend schedule API and
   fan-out are implemented; the staging scheduler trigger is pending.
-- Per-entry journal analysis is a core capability with post-MVP delivery.
+- Per-entry journal analysis is a core capability with post-MVP delivery. Its
+  backend is implemented in Phase 4A; mobile controls remain pending.
 - Sensitive memory requires explicit, revocable consent; the backend consent
   API and retrieval enforcement are implemented.
 - Companion and insight prompt v2 are active.

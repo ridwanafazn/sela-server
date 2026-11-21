@@ -1,6 +1,6 @@
 # SELA Product Vision Decisions
 
-Version: 1.1
+Version: 1.2
 Status: Accepted
 Date: 2026-11-21
 
@@ -26,7 +26,7 @@ already implement it.
 | # | Area | Decision | Delivery |
 |---|---|---|---|
 | 1 | Scheduled insights | Weekly and monthly reflections are MVP. User opt-in, timezone-aware, and user-configurable. | MVP |
-| 2 | Journal analysis | A core product capability, but post-MVP delivery. | Post-MVP |
+| 2 | Journal analysis | A core product capability, but post-MVP delivery. | Post-MVP backend implemented in Phase 4A; mobile pending |
 | 3 | Frameworks and Life Priority | Internal, selective guidance. Not exposed as labels or scores. | MVP prompt guidance |
 | 4 | Companion challenge and adaptive style | Strengthen the Companion prompt now. Define healthy challenge and adaptive behavior explicitly. | Prompt v2 active; live quality evaluation pending |
 | 5 | "Explore further" | Handled through Companion, not as a new insight feedback action. | MVP UX |
@@ -85,8 +85,10 @@ When per-entry analysis is delivered:
 - The original journal must remain unchanged.
 - The user must be able to request, inspect, and delete the analysis.
 
-Implementation status: not implemented. No per-entry analysis endpoint or mobile
-action is part of the MVP.
+Implementation status: Phase 4A backend implemented. The API supports request,
+inspection, deletion, stale markers, evidence, and asynchronous job polling.
+Mobile request and inspection controls remain pending. See
+`docs/backend/19-journal-analysis.md`.
 
 ### 3.3 Frameworks and Life Priority are internal guidance
 

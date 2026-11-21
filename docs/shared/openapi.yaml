@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: SELA API
-  version: 1.5.0
+  version: 1.6.0
   description: |
     REST API for SELA, a personal AI journaling and companion platform.
 
@@ -13,7 +13,8 @@ info:
     It reflects the P0 decisions: OpenAPI as the canonical contract,
     asynchronous insight generation, scheduled weekly/monthly insights,
     sensitive memory consent, server-side journal drafts, rotating refresh
-    tokens, asynchronous account deletion, and explicit evidence for insights.
+    tokens, asynchronous account deletion, explicit evidence for insights, and
+    asynchronous per-entry journal analysis.
   license:
     name: Proprietary
     identifier: LicenseRef-Proprietary
@@ -39,6 +40,8 @@ tags:
     description: Personal memory review and feedback.
   - name: Insights
     description: Asynchronous insight generation, evidence, and feedback.
+  - name: Journal Analysis
+    description: Asynchronous per-entry reflection, inspection, and deletion.
 
 security:
   - BearerAuth: []
@@ -590,6 +593,78 @@ paths:
           $ref: "#/components/responses/PreconditionRequired"
         "429":
           $ref: "#/components/responses/RateLimited"
+
+  /journals/{journalId}/analysis:
+    parameters:
+      - $ref: "#/components/parameters/JournalId"
+    post:
+      tags: [Journal Analysis]
+      operationId: requestJournalAnalysis
+      summary: Request an asynchronous analysis of one published journal entry
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "202":
+          description: Analysis request accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JournalAnalysisAccepted"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+    get:
+      tags: [Journal Analysis]
+      operationId: getJournalAnalysis
+      summary: Get the newest analysis for a journal entry
+      responses:
+        "200":
+          description: Analysis retrieved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JournalAnalysisResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Journal Analysis]
+      operationId: deleteJournalAnalysis
+      summary: Delete every stored analysis for a journal entry
+      responses:
+        "204":
+          description: Analysis deleted and pending jobs canceled
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /journal-analysis-jobs/{jobId}:
+    parameters:
+      - $ref: "#/components/parameters/JobId"
+    get:
+      tags: [Journal Analysis]
+      operationId: getJournalAnalysisJob
+      summary: Poll a journal analysis job
+      responses:
+        "200":
+          description: Journal analysis job
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JournalAnalysisJobResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   /journal-changes:
     get:
@@ -1623,6 +1698,189 @@ components:
           $ref: "#/components/schemas/CursorPagination"
         sync:
           $ref: "#/components/schemas/SyncMetadata"
+
+    JournalAnalysisEvidence:
+      type: object
+      required: [source_type, source_id, source_date, note]
+      properties:
+        source_type:
+          type: string
+          enum: [journal]
+        source_id:
+          type: string
+          format: uuid
+        source_date:
+          type: [string, "null"]
+          format: date
+        note:
+          type: string
+          maxLength: 300
+
+    JournalAnalysis:
+      type: object
+      required:
+        - id
+        - journal_id
+        - journal_version
+        - current_journal_version
+        - stale
+        - entry_date
+        - summary
+        - observation
+        - interpretation
+        - hypothesis
+        - confidence
+        - confidence_label
+        - reflection_question
+        - suggested_direction
+        - evidence
+        - model
+        - prompt_version
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        journal_id:
+          type: string
+          format: uuid
+        journal_version:
+          type: integer
+          minimum: 1
+        current_journal_version:
+          type: integer
+          minimum: 1
+        stale:
+          type: boolean
+        entry_date:
+          type: string
+          format: date
+        summary:
+          type: string
+        observation:
+          type: string
+        interpretation:
+          type: string
+        hypothesis:
+          type: [string, "null"]
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+        confidence_label:
+          type: string
+          enum: [strong, moderate, limited]
+        reflection_question:
+          type: string
+        suggested_direction:
+          type: string
+          enum: [improve, maintain, accept]
+        evidence:
+          type: array
+          maxItems: 1
+          items:
+            $ref: "#/components/schemas/JournalAnalysisEvidence"
+        model:
+          type: [string, "null"]
+        prompt_version:
+          type: [string, "null"]
+        created_at:
+          type: string
+          format: date-time
+
+    JournalAnalysisResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/JournalAnalysis"
+
+    JournalAnalysisAccepted:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [job_id, status, status_url, retry_after_seconds]
+          properties:
+            job_id:
+              type: string
+              format: uuid
+            status:
+              type: string
+              enum: [queued]
+            status_url:
+              type: string
+            retry_after_seconds:
+              type: integer
+              minimum: 1
+
+    JournalAnalysisJobStatus:
+      type: string
+      enum: [queued, processing, completed, failed]
+
+    JournalAnalysisJobOutcome:
+      type: string
+      enum: [analysis_created, insufficient_evidence, journal_changed, budget_exhausted]
+
+    JournalAnalysisJobError:
+      type: object
+      required: [code, message, retryable]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        retryable:
+          type: boolean
+
+    JournalAnalysisJob:
+      type: object
+      required:
+        - job_id
+        - status
+        - outcome
+        - analysis_id
+        - message
+        - error
+        - retry_after_seconds
+        - created_at
+        - updated_at
+      properties:
+        job_id:
+          type: string
+          format: uuid
+        status:
+          $ref: "#/components/schemas/JournalAnalysisJobStatus"
+        outcome:
+          oneOf:
+            - $ref: "#/components/schemas/JournalAnalysisJobOutcome"
+            - type: "null"
+        analysis_id:
+          type: [string, "null"]
+          format: uuid
+        message:
+          type: [string, "null"]
+        error:
+          oneOf:
+            - $ref: "#/components/schemas/JournalAnalysisJobError"
+            - type: "null"
+        retry_after_seconds:
+          type: integer
+          minimum: 1
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    JournalAnalysisJobResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/JournalAnalysisJob"
 
     CreateJournalRequest:
       type: object

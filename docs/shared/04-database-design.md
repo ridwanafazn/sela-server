@@ -1,8 +1,9 @@
 # SELA Database Design
 
-Version: 1.5
+Version: 1.6
 
-Status: P0 schema decisions locked, with 2026-11-21 product vision decisions
+Status: P0 schema decisions locked, with 2026-11-21 product vision, pre-public,
+and Phase 4A decisions
 
 ## 1. Database Strategy
 
@@ -470,6 +471,42 @@ Rules:
 - The next run is advanced only after a job is enqueued.
 - Account deletion cascades through `user_id`.
 
+### journal_analyses
+
+Stores per-entry analyses separately from the original journal.
+
+Fields:
+
+- id.
+- user_id.
+- journal_id.
+- journal_version, 1 or greater.
+- job_id, unique.
+- summary.
+- observation.
+- interpretation.
+- hypothesis, nullable.
+- confidence, 0 to 1.
+- confidence_label: `strong`, `moderate`, `limited`.
+- reflection_question.
+- suggested_direction: `improve`, `maintain`, `accept`.
+- evidence_note.
+- model, nullable.
+- prompt_version, nullable.
+- created_at.
+
+Rules:
+
+- One stored analysis per `(journal_id, journal_version)`.
+- One analysis per `job_id`.
+- The original journal is immutable from the analysis pipeline.
+- Analysis content is immutable; users can delete it but not edit it.
+- Deleting a journal removes its stored analyses; account deletion cascades
+  through foreign keys.
+- Only the requested entry is used; no cross-entry retrieval.
+- The API marks an analysis stale when the journal version has advanced.
+- AI usage events reference the analysis through `reference_id`.
+
 ### ai_usage_events
 
 Stores operational AI metadata for cost, latency, and error tracking.
@@ -478,7 +515,7 @@ Fields:
 
 - id.
 - user_id.
-- operation: `companion`, `memory.extraction.journal`, `memory.extraction.message`, `insight.generate`, `embedding.journal`.
+- operation: `companion`, `memory.extraction.journal`, `memory.extraction.message`, `insight.generate`, `journal.analysis`, `embedding.journal`.
 - provider.
 - model.
 - input_tokens, output_tokens.
@@ -749,13 +786,13 @@ The index `journals(user_id, updated_at, id)` supports incremental synchronizati
 The following are deferred to the next development phase:
 
 - Granular `user_preferences` and broader privacy-consent records.
-- `journal_analyses` and retrieval of stored journal analysis.
 - Data export records.
 - Audit-log tables beyond insight feedback and idempotency.
 - Row-level security evaluation.
 
 Scheduled insight preferences and sensitive memory consent are implemented in
-migration `17`.
+migration `17`. Pre-public account gates are implemented in migration `18`.
+Per-entry journal analysis is implemented in migration `19`.
 
 ## 14. Database ERD
 

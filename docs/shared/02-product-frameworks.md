@@ -1,6 +1,6 @@
 # SELA Product Frameworks
 
-Version: 1.1
+Version: 1.2
 
 ## 1. Purpose
 
@@ -442,8 +442,9 @@ Rules:
   - direct when avoidance is clear;
   - practical when the user asks for action;
   - non-advisory when the user only wants to be heard.
-- Per-entry journal analysis is post-MVP. When delivered, it must use the same
-  framework selection, evidence, and uncertainty standards as insights.
+- Per-entry journal analysis is post-MVP and its backend is implemented. It uses
+  the same framework selection, evidence, and uncertainty standards as insights,
+  with only the requested entry as source material.
 
 The active Behavior prompts are:
 

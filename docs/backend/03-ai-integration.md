@@ -5,8 +5,8 @@ Version: 1.2
 Status: MVP baseline with 2026-11-21 product vision decisions
 
 > Scope note: scheduled weekly/monthly insights are MVP. Per-entry journal
-> analysis is post-MVP. Sensitive memory requires explicit consent. See
-> `docs/shared/10-product-vision-decisions.md`.
+> analysis is post-MVP; its backend is implemented. Sensitive memory requires
+> explicit consent. See `docs/shared/10-product-vision-decisions.md`.
 
 ## 1. Purpose
 
@@ -417,8 +417,35 @@ Requirements:
 - In-app delivery is required. Push notification delivery is a separate
   decision.
 
-Per-entry journal analysis is post-MVP. When delivered, it must be tied to one
-owned journal entry and stored separately from the original.
+### Per-entry Journal Analysis
+
+Per-entry journal analysis is post-MVP and its backend is implemented.
+
+Requirements:
+
+- Analysis is tied to one owned, published journal entry.
+- Only that entry is sent to the provider. No memory, conversation, or
+  cross-entry retrieval is performed.
+- `POST /journals/{journalId}/analysis` requires an idempotency key and creates
+  a `journal.analysis` job.
+- The worker checks the journal version and publication state before calling the
+  provider.
+- One stored analysis is allowed per journal version.
+- The output separates observation, interpretation, and hypothesis, and includes
+  confidence, a reflection question, a suggested direction, and an evidence
+  note.
+- Confidence below `0.40` completes the job with `insufficient_evidence` without
+  storing an analysis.
+- A changed or deleted journal completes the job with `journal_changed`.
+- Budget and rate limits apply before and inside the worker.
+- Users can inspect and delete the analysis. Deleting an analysis cancels
+  pending jobs and never changes the journal.
+- The response marks the analysis stale when the journal version has advanced.
+
+Prompt: `prompts/journal_analysis/v1.md`.
+Prompt version: `journal_analysis/v1`.
+
+See `docs/backend/19-journal-analysis.md`.
 
 ## 10. Prompt Construction
 

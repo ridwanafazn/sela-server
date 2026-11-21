@@ -105,6 +105,7 @@ Returns a JSON attachment with:
 - conversations and messages,
 - memories, sources, conflicts, and consent,
 - insights, evidence, and feedback,
+- per-entry journal analyses,
 - insight schedules,
 - AI usage metadata,
 - session metadata without refresh-token hashes,

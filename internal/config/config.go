@@ -120,6 +120,8 @@ type RateLimit struct {
 	PasswordResetPerHourAccount  int
 	EmailVerificationPerHourUser int
 	ExportPerHourUser            int
+	AnalysisPerHour              int
+	AnalysisPerDay               int
 }
 
 // AI holds provider, model, pricing, and budget settings. Fake providers are
@@ -306,6 +308,8 @@ func load(lookup func(string) (string, bool)) (*Config, error) {
 		PasswordResetPerHourAccount:  intValue(lookup, "RATE_LIMIT_PASSWORD_RESET_PER_HOUR_ACCOUNT", 5, &problems),
 		EmailVerificationPerHourUser: intValue(lookup, "RATE_LIMIT_EMAIL_VERIFICATION_PER_HOUR_USER", 5, &problems),
 		ExportPerHourUser:            intValue(lookup, "RATE_LIMIT_EXPORT_PER_HOUR_USER", 3, &problems),
+		AnalysisPerHour:              intValue(lookup, "RATE_LIMIT_ANALYSIS_PER_HOUR", 10, &problems),
+		AnalysisPerDay:               intValue(lookup, "RATE_LIMIT_ANALYSIS_PER_DAY", 30, &problems),
 	}
 	if rateLimitCfg.TrustedProxyHops < 0 || rateLimitCfg.TrustedProxyHops > 10 {
 		problems = append(problems, "RATE_LIMIT_TRUSTED_PROXY_HOPS must be between 0 and 10")
@@ -324,6 +328,8 @@ func load(lookup func(string) (string, bool)) (*Config, error) {
 		"RATE_LIMIT_PASSWORD_RESET_PER_HOUR_ACCOUNT":  rateLimitCfg.PasswordResetPerHourAccount,
 		"RATE_LIMIT_EMAIL_VERIFICATION_PER_HOUR_USER": rateLimitCfg.EmailVerificationPerHourUser,
 		"RATE_LIMIT_EXPORT_PER_HOUR_USER":             rateLimitCfg.ExportPerHourUser,
+		"RATE_LIMIT_ANALYSIS_PER_HOUR":                rateLimitCfg.AnalysisPerHour,
+		"RATE_LIMIT_ANALYSIS_PER_DAY":                 rateLimitCfg.AnalysisPerDay,
 	} {
 		if value < 1 {
 			problems = append(problems, key+" must be at least 1")

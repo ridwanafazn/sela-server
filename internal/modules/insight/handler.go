@@ -34,7 +34,7 @@ func (h *Handler) Request(c *gin.Context) {
 		return
 	}
 
-	idempotencyKey, ok := requireIdempotencyKey(c)
+	idempotencyKey, ok := httpx.RequireIdempotencyKey(c)
 	if !ok {
 		return
 	}
@@ -194,29 +194,6 @@ func (h *Handler) JobStatus(c *gin.Context) {
 
 	c.Header("Retry-After", strconv.Itoa(view.RetryAfterSeconds))
 	response.Data(c, http.StatusOK, view)
-}
-
-func requireIdempotencyKey(c *gin.Context) (string, bool) {
-	raw := strings.TrimSpace(c.GetHeader("Idempotency-Key"))
-	if raw == "" {
-		response.Error(c, apierrors.Validation("The request is invalid.", apierrors.Detail{
-			Field:   "Idempotency-Key",
-			Code:    "REQUIRED",
-			Message: "The Idempotency-Key header is required.",
-		}))
-		return "", false
-	}
-
-	parsed, err := uuid.Parse(raw)
-	if err != nil {
-		response.Error(c, apierrors.Validation("The request is invalid.", apierrors.Detail{
-			Field:   "Idempotency-Key",
-			Code:    "INVALID_FORMAT",
-			Message: "The Idempotency-Key header must be a UUID.",
-		}))
-		return "", false
-	}
-	return parsed.String(), true
 }
 
 func requireInsightID(c *gin.Context) (string, bool) {

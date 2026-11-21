@@ -21,6 +21,7 @@ import (
 	"github.com/ridwanafazn/sela-server/internal/modules/insight"
 	"github.com/ridwanafazn/sela-server/internal/modules/job"
 	"github.com/ridwanafazn/sela-server/internal/modules/journal"
+	"github.com/ridwanafazn/sela-server/internal/modules/journalanalysis"
 	"github.com/ridwanafazn/sela-server/internal/modules/memory"
 	"github.com/ridwanafazn/sela-server/internal/modules/prepublic"
 	"github.com/ridwanafazn/sela-server/internal/modules/user"
@@ -138,6 +139,19 @@ func BuildRouter(cfg *config.Config, log *slog.Logger, db *database.DB) (*gin.En
 		journal.Limits{PerMinute: cfg.RateLimit.JournalPerMinute},
 	)
 	journalHandler := journal.NewHandler(journalService)
+	analysisService := journalanalysis.NewService(
+		journalanalysis.NewRepository(db.Gorm),
+		journalRepo,
+		queue,
+		limiter,
+		usageService,
+		journalanalysis.Limits{
+			PerHour: cfg.RateLimit.AnalysisPerHour,
+			PerDay:  cfg.RateLimit.AnalysisPerDay,
+		},
+		log,
+	)
+	analysisHandler := journalanalysis.NewHandler(analysisService)
 
 	retrieval := journal.NewRetrievalService(
 		journalRepo,
@@ -218,6 +232,10 @@ func BuildRouter(cfg *config.Config, log *slog.Logger, db *database.DB) (*gin.En
 			protected.GET("/journals/:journalId", journalHandler.Get)
 			protected.PATCH("/journals/:journalId", journalHandler.Update)
 			protected.DELETE("/journals/:journalId", journalHandler.Delete)
+			protected.POST("/journals/:journalId/analysis", analysisHandler.Request)
+			protected.GET("/journals/:journalId/analysis", analysisHandler.Get)
+			protected.DELETE("/journals/:journalId/analysis", analysisHandler.Delete)
+			protected.GET("/journal-analysis-jobs/:jobId", analysisHandler.JobStatus)
 
 			protected.GET("/conversations", conversationHandler.List)
 			protected.POST("/conversations", conversationHandler.Create)

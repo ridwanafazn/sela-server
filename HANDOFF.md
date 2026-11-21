@@ -1,28 +1,43 @@
 # Session Handoff
 
-Last updated: 2026-11-21 (pre-public backend)
+Last updated: 2026-11-21 (Phase 4A journal analysis backend)
 
 ## Current state
 
 - Repository: `C:\Users\Ridwan\Git-v2\sela-server`
 - Branch: `main`, synced with `origin/main`
-- Latest commit: pre-public backend implementation (see `git log -1`).
+- Latest commit: Phase 4A journal analysis implementation (see `git log -1`).
 - Working tree: clean after commit.
 - Local staging containers: stopped.
 - Release tags:
   - `v0.2.0` — Phase 2 backend freeze
   - `v0.2.1` — Vertex 768-dimensional embedding compatibility
-- API contract: OpenAPI `1.5.0`
-- Database schema: migration version `18` (pre-beta and pre-public addenda; `v0.2.0` shipped at 16)
+- API contract: OpenAPI `1.6.0`
+- Database schema: migration version `19` (pre-beta, pre-public, and Phase 4A
+  addenda; `v0.2.0` shipped at 16)
 - Backend Phase 2: complete and frozen (`10/10` internal stages)
+- Phase 4A journal analysis backend: complete
 
-## Product vision reconciliation — 2026-11-21
+## Phase progression
+
+| Phase | Status | Notes |
+|---|---|---|
+| Phase 0 - Contract lock | Complete | OpenAPI, DB design, and P0 decisions locked. |
+| Phase 1 - Walking skeleton | Complete | Auth and journal flow verified. |
+| Phase 2 - Core MVP | Complete and frozen | Backend `v0.2.0`; mobile delivery separate. |
+| Phase 3 - Beta hardening | Backend complete | Local hardening, offline backend, and observability scaffolding done; mobile offline and hosted alerts pending. |
+| Pre-public backend gate | Complete | Verification, reset, sessions, export, consent, entitlements. External legal/payment gates remain. |
+| Phase 4A - Journal analysis | Backend complete | Async request, evidence, stale state, inspection, deletion, export. Mobile controls pending. |
+| Phase 4B+ - Other depth work | Not started | Privacy center, push, read cache, multi-device sync, advanced search, cost work; evidence required. |
+
+## Product vision reconciliation - 2026-11-21
 
 The product vision review changed the MVP scope. Decisions are recorded in
 `docs/shared/10-product-vision-decisions.md`.
 
 - Weekly and monthly scheduled insights are promoted to MVP.
-- Per-entry journal analysis is a core capability with post-MVP delivery.
+- Per-entry journal analysis is a core capability with post-MVP delivery. Its
+  backend is implemented in Phase 4A; mobile controls remain pending.
 - Frameworks and Life Priority remain internal guidance, not user-facing labels
   or scores.
 - Companion and insight prompt v2 are active. Deterministic safety,
@@ -156,21 +171,59 @@ External gates:
 - Crisis-resource review.
 - External penetration test.
 
+## Phase 4A journal analysis backend - 2026-11-21
+
+Implemented:
+
+- Migration `19` with `journal_analyses`.
+- `POST /journals/{journalId}/analysis`.
+- `GET /journals/{journalId}/analysis`.
+- `DELETE /journals/{journalId}/analysis`.
+- `GET /journal-analysis-jobs/{jobId}`.
+- Idempotent asynchronous job type `journal.analysis`.
+- Outcomes: `analysis_created`, `insufficient_evidence`, `journal_changed`,
+  and `budget_exhausted`.
+- One analysis per journal version, stored separately from the journal.
+- Stale marker after a journal edit.
+- Analysis prompt `journal_analysis/v1`.
+- Rate limits `RATE_LIMIT_ANALYSIS_PER_HOUR` and
+  `RATE_LIMIT_ANALYSIS_PER_DAY`.
+- AI budget checks, usage metadata, export, and cascade deletion.
+- Unit and integration coverage for request, replay, polling, duplicate
+  conflicts, drafts, cross-user isolation, stale state, deletion, cancellation,
+  and re-request.
+
+Verification:
+
+- `go test ./...` passed.
+- Full integration suite passed against PostgreSQL + pgvector.
+- Migration `19` was applied, rolled back, and re-applied; Neon staging was
+  migrated to `19`.
+- Local staging real-provider E2E passed with OpenRouter
+  `deepseek/deepseek-v4.1-flash-1017`: analysis created, evidence returned,
+  export included the analysis, deletion returned `204`, and the next read
+  returned `404`.
+- OpenAPI lint is valid with four pre-existing health-endpoint warnings.
+
+Remaining mobile work:
+
+- Analysis request, polling, inspection, stale-state, and delete controls.
+
 ## Pre-Beta position
 
 Workstreams from `docs/backend/11-focus-phase.md`:
 
-1. Real Vertex embeddings and live model evaluation — not started. Prompt v2 is
-   active; deterministic gates pass.
-2. Scheduled insights MVP addendum — backend implemented; staging scheduler
-   trigger pending.
-3. Staging deployment — Neon schema `17` is applied and locally smoke-tested;
-   GCP deployment is blocked on billing and disabled APIs.
+1. Real embeddings and live model evaluation — local real-provider generation
+   and Ollama embeddings pass. Vertex and manual live quality evaluation remain.
+2. Scheduled insights MVP addendum — backend and local scheduler implemented;
+   mobile controls pending.
+3. Staging deployment — Neon schema `19` is applied and local staging is
+   verified; GCP deployment is blocked on billing and disabled APIs.
 4. Mobile MVP, including memory, insights, schedule controls, and editable
-   profile preferences — not started.
-5. Beta hardening - local backend checks implemented; hosted monitoring and
+   profile preferences — Phase 1 code complete; remaining flows not started.
+5. Beta hardening — local backend checks implemented; hosted monitoring and
    clinical review pending. See `docs/backend/16-beta-hardening.md`.
-6. Offline-first - backend `GET /journal-changes` implemented; mobile L1
+6. Offline-first — backend `GET /journal-changes` implemented; mobile L1
    deferred.
 
 The local staging path is verified and is the active path. The GCP runbook
@@ -194,8 +247,8 @@ privacy/legal work.
   Insights and memory (Phase 2), offline L1 (Phase 3).
 - Authoritative mobile docs:
   `C:\Users\Ridwan\Documents\Default Project\sela-documentation\sela-mobile\docs\flutter`.
-- The docs package ships OpenAPI 1.2.0; the backend repository is 1.4.0.
-  Use the repository contract until the documentation is reconciled.
+- The mobile docs package predates the current backend contract. Use the
+  repository OpenAPI `1.6.0` until the documentation is reconciled.
 
 ## Environment status
 
@@ -400,7 +453,8 @@ Required local staging values:
   not implemented.
 - Scheduled insights are implemented in the backend. The local scheduler runs
   in Docker; mobile controls are pending.
-- Per-entry journal analysis is post-MVP and not implemented.
+- Per-entry journal analysis is implemented in the backend. Mobile request,
+  inspection, stale-state, and delete controls are pending.
 - Sensitive memory consent is implemented in the backend. The mobile consent UI
   is pending.
 - Prompt v2 is active. Live model quality evaluation remains manual.
@@ -439,6 +493,7 @@ Required local staging values:
 - `docs/backend/16-beta-hardening.md`
 - `docs/backend/17-offline-sync.md`
 - `docs/backend/18-prepublic.md`
+- `docs/backend/19-journal-analysis.md`
 - `scripts/staging-preflight.ps1`
 - `docs/backend/09-safety-evaluation-cost.md`
 - `docs/shared/openapi.yaml`

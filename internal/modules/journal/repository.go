@@ -234,11 +234,17 @@ func (r *Repository) SoftDeleteTx(tx *gorm.DB, id, userID string, version int, n
 	).Error; err != nil {
 		return err
 	}
-	return tx.Exec(
+	if err := tx.Exec(
 		`UPDATE insight_evidence
 		 SET source_deleted_at = ?
 		 WHERE journal_id = ? AND source_deleted_at IS NULL`,
 		now, id,
+	).Error; err != nil {
+		return err
+	}
+	return tx.Exec(
+		`DELETE FROM journal_analyses WHERE journal_id = ? AND user_id = ?`,
+		id, userID,
 	).Error
 }
 

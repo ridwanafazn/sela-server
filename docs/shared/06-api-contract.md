@@ -1,14 +1,15 @@
 # SELA API Contract
 
-Version: 1.5
+Version: 1.6
 
-Status: P0 decisions locked, with 2026-11-21 product vision and pre-public decisions
+Status: P0 decisions locked, with 2026-11-21 product vision, pre-public, and
+Phase 4A decisions
 
 > Scope note: scheduled insight preferences and sensitive memory consent are
-> part of the MVP contract. Per-entry journal analysis is post-MVP and is not an
-> MVP endpoint. Insight feedback remains `confirm`, `correct`, or `reject`;
-> "explore further" is a Companion flow, not a fourth feedback action. See
-> `10-product-vision-decisions.md`.
+> part of the MVP contract. Per-entry journal analysis is post-MVP; its backend
+> contract is now implemented. Insight feedback remains `confirm`, `correct`,
+> or `reject`; "explore further" is a Companion flow, not a fourth feedback
+> action. See `10-product-vision-decisions.md`.
 
 ## 1. Purpose
 
@@ -299,7 +300,8 @@ Rules:
 - A schedule change MUST NOT create duplicate jobs or insights.
 - In-app delivery is required. Push notification delivery is a separate
   decision.
-- Per-entry journal analysis is not part of the MVP contract.
+- Per-entry journal analysis is a post-MVP contract delivered in Phase 4A; it
+  is not part of the MVP scope table.
 
 ### Insight Feedback
 
@@ -376,7 +378,28 @@ Rules for the account security endpoints defined in `openapi.yaml`:
 - Entitlement state is provider-independent. Premium enforcement is not part
   of this contract phase.
 
-## 15. Contract Governance
+## 15. Journal Analysis
+
+Rules for the per-entry analysis endpoints defined in `openapi.yaml`:
+
+- Analysis applies to one owned, published journal entry.
+- `POST /journals/{journalId}/analysis` requires `Idempotency-Key` and returns
+  `202` with a job identifier.
+- A journal version can have one stored analysis. A duplicate request returns
+  `409` until the analysis is deleted or the journal is updated.
+- Drafts return `409`.
+- `GET /journals/{journalId}/analysis` returns the newest analysis and marks it
+  stale when the journal version has changed.
+- `DELETE /journals/{journalId}/analysis` deletes stored analyses and cancels
+  pending jobs without changing the journal.
+- Job outcomes are `analysis_created`, `insufficient_evidence`,
+  `journal_changed`, and `budget_exhausted`.
+- Only the requested entry is used. No memory, conversation, or cross-entry
+  retrieval is allowed.
+- Analysis content is stored separately, is immutable, and is included in the
+  user data export.
+
+## 16. Contract Governance
 
 Before an endpoint is considered implementation-ready:
 

@@ -15,11 +15,12 @@ import (
 
 // Operation names.
 const (
-	OperationCompanion     = "companion"
-	OperationMemoryJournal = "memory.extraction.journal"
-	OperationMemoryMessage = "memory.extraction.message"
-	OperationInsight       = "insight.generate"
-	OperationEmbedding     = "embedding.journal"
+	OperationCompanion       = "companion"
+	OperationMemoryJournal   = "memory.extraction.journal"
+	OperationMemoryMessage   = "memory.extraction.message"
+	OperationInsight         = "insight.generate"
+	OperationJournalAnalysis = "journal.analysis"
+	OperationEmbedding       = "embedding.journal"
 )
 
 // Event is one AI operation's operational metadata. It never contains prompt

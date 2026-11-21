@@ -1,12 +1,13 @@
 # SELA Product Specification
 
-Version: 1.3
+Version: 1.4
 
-Status: MVP baseline with 2026-11-21 product vision decisions
+Status: MVP baseline with 2026-11-21 product vision decisions and Phase 4A
 
 > Scope note: weekly and monthly scheduled insights are MVP. Per-entry journal
-> analysis is a core product capability with post-MVP delivery. Sensitive
-> memory requires explicit consent. See `10-product-vision-decisions.md`.
+> analysis is a core product capability with post-MVP delivery; its backend is
+> implemented in Phase 4A and mobile controls remain pending. Sensitive memory
+> requires explicit consent. See `10-product-vision-decisions.md`.
 
 ## 1. Product Overview
 
@@ -434,3 +435,19 @@ Still external:
 - Privacy policy, terms, and deletion disclosure.
 - Crisis-resource review.
 - External penetration test.
+
+## 14. Phase 4A Journal Analysis
+
+The per-entry journal analysis backend is implemented:
+
+- Asynchronous, idempotent request for one owned, published journal entry.
+- One stored analysis per journal version, separate from the journal.
+- Evidence, uncertainty, and suggested direction fields.
+- Stale marker when the entry changes.
+- Inspection and deletion by the user.
+- AI budget, rate limits, usage metadata, data export, and cascade deletion.
+- Job outcomes: `analysis_created`, `insufficient_evidence`,
+  `journal_changed`, and `budget_exhausted`.
+
+Mobile request, inspection, stale-state, and deletion controls remain pending.
+See `docs/backend/19-journal-analysis.md`.
