@@ -242,6 +242,32 @@ Remaining mobile work:
 - Conflict detection and resolution UI.
 - Cleanup on logout and account deletion.
 
+### 6. Pre-public backend
+
+Status: core security/compliance backend implemented. Commercial and legal
+provider gates remain. See `docs/backend/18-prepublic.md`.
+
+Completed:
+
+- Email verification and resend.
+- Password reset with all-session revocation.
+- Session inventory, single-session revoke, and revoke-others.
+- Synchronous user data export without credential material.
+- Adult confirmation and legal acceptance with version checks.
+- Provider-independent free/premium entitlement state.
+- Manual support commands for entitlement lookup/grant/revoke.
+- File/SMTP email delivery abstraction.
+
+External gates:
+
+- Payment provider, checkout, signed webhooks, invoices, refunds.
+- Premium limit enforcement.
+- Admin roles/API and support console.
+- Self-declared age confirmation to formal legal policy.
+- Privacy policy, terms, and deletion disclosure.
+- Crisis-resource review.
+- External penetration test.
+
 ## Required inputs
 
 ### Immediate
@@ -253,6 +279,7 @@ Remaining mobile work:
 | Hosting project and billing | API + worker | Limited free tiers | Worker must be long-running, not request-only. |
 | Production LLM key and budget | Real staging responses | No | OpenRouter or OpenCode paid inference; not the Go coding plan. |
 | Named safety reviewer | Crisis resources | No | Indonesian resources and escalation copy must be reviewed. |
+| Email delivery relay | Verification and reset email | Limited free tiers | SMTP credentials; the file outbox is local-development only. |
 
 ### Mobile and beta
 
@@ -263,6 +290,11 @@ Remaining mobile work:
 - Account deletion disclosure URL.
 - Reviewed copy for sensitive memory consent and revocation.
 - Reviewed copy for scheduled insight opt-in, cadence, and disable behavior.
+- Payment provider account and product decision (Midtrans, Xendit, or Play
+  Billing).
+- Admin/support tooling scope for entitlement and account operations.
+- Final terms, privacy policy, and age-assurance policy.
+- Client email-verification and password-reset screens or deep links.
 
 ### Operations
 

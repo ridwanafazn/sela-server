@@ -1,20 +1,19 @@
 # Session Handoff
 
-Last updated: 2026-11-21 (B1 + local beta hardening)
+Last updated: 2026-11-21 (pre-public backend)
 
 ## Current state
 
 - Repository: `C:\Users\Ridwan\Git-v2\sela-server`
 - Branch: `main`, synced with `origin/main`
-- Latest commit:
-  - `3bdee33` — complete backend addendum and local beta hardening
-- Working tree: clean.
+- Latest commit: pre-public backend implementation (see `git log -1`).
+- Working tree: clean after commit.
 - Local staging containers: stopped.
 - Release tags:
   - `v0.2.0` — Phase 2 backend freeze
   - `v0.2.1` — Vertex 768-dimensional embedding compatibility
-- API contract: OpenAPI `1.4.0`
-- Database schema: migration version `17` (pre-beta addendum; `v0.2.0` shipped at 16)
+- API contract: OpenAPI `1.5.0`
+- Database schema: migration version `18` (pre-beta and pre-public addenda; `v0.2.0` shipped at 16)
 - Backend Phase 2: complete and frozen (`10/10` internal stages)
 
 ## Product vision reconciliation — 2026-11-21
@@ -118,6 +117,44 @@ Implemented:
 
 Mobile offline L1 remains pending: encrypted local database, outbox, foreground
 sync, conflict-resolution UI, and local cleanup on logout/deletion.
+
+## Pre-public backend — 2026-11-21
+
+Implemented:
+
+- Email verification and resend.
+- Password reset with all-session revocation.
+- Session inventory, single-session revoke, and revoke-others.
+- Synchronous user data export without credential material.
+- Adult confirmation and legal acceptance with version checks.
+- Free/premium entitlement state.
+- Manual support commands:
+  - `go run ./cmd/ops user -email ...`
+  - `go run ./cmd/ops grant -email ... -plan premium -days 30`
+  - `go run ./cmd/ops revoke -email ...`
+- File/SMTP email delivery abstraction.
+
+Verification:
+
+- `go test ./...` passed.
+- Full integration suite passed against PostgreSQL + pgvector, including
+  registration verification, unverified-login block, token reuse rejection,
+  password reset with all-session revocation, session inventory and revocation,
+  consent version checks, entitlement defaults, and export content.
+- Local staging E2E passed for email verification, consent acceptance,
+  entitlement, and data export without credential material.
+- Migration `18` was applied, rolled back to `0`, and re-applied successfully.
+- OpenAPI lint is valid with four pre-existing health-endpoint warnings.
+
+External gates:
+
+- Payment provider, checkout, signed webhooks, invoices, refunds.
+- Premium limit enforcement.
+- Admin roles/API and support console.
+- Legal review of age/consent policy.
+- Privacy policy, terms, deletion disclosure.
+- Crisis-resource review.
+- External penetration test.
 
 ## Pre-Beta position
 
@@ -351,6 +388,8 @@ Required local staging values:
    insight review, schedule controls, consent UI, and editable profile
    preferences.
 7. Revive the GCP path only if public beta hosting requires it.
+8. Complete the external pre-public gates: payment provider, premium limits,
+   legal policy review, privacy/terms, crisis review, and penetration test.
 
 ## Known gaps
 
@@ -377,11 +416,15 @@ Required local staging values:
 - Real semantic retrieval works locally with Ollama `nomic-embed-text`.
 - OpenRouter handles text generation outside GCP. A Vertex Gemini LLM adapter is
   only required if all journal text must stay inside GCP.
-- Email verification and password reset are not implemented. Public users who
-  forget a password cannot recover their account.
-- Subscription plans, payment webhooks, entitlements, and free/premium limit
-  enforcement are not implemented.
-- Data export, consent/age gating, and admin/support tooling are not implemented.
+- Email verification, password reset, session inventory, data export,
+  adult/legal consent, and entitlement state are implemented.
+- Payment provider integration, signed webhooks, premium limit enforcement, and
+  admin/support tooling are not implemented.
+- Verification and reset emails contain raw tokens, not clickable links; client
+  routes and mobile screens remain pending.
+- The email-verification gate blocks login when enabled, but a session created
+  during registration remains usable. Full unverified-session restriction is a
+  later hardening decision.
 
 ## Useful docs
 
@@ -395,6 +438,7 @@ Required local staging values:
 - `docs/backend/15-staging-without-gcp.md`
 - `docs/backend/16-beta-hardening.md`
 - `docs/backend/17-offline-sync.md`
+- `docs/backend/18-prepublic.md`
 - `scripts/staging-preflight.ps1`
 - `docs/backend/09-safety-evaluation-cost.md`
 - `docs/shared/openapi.yaml`

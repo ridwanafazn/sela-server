@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: SELA API
-  version: 1.4.0
+  version: 1.5.0
   description: |
     REST API for SELA, a personal AI journaling and companion platform.
 
@@ -134,6 +134,8 @@ paths:
           $ref: "#/components/responses/UnsupportedMediaType"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/EmailNotVerified"
         "429":
           $ref: "#/components/responses/RateLimited"
 
@@ -171,6 +173,126 @@ paths:
           description: Session revoked
         "401":
           $ref: "#/components/responses/Unauthorized"
+
+  /auth/email-verification/confirm:
+    post:
+      tags: [Authentication]
+      operationId: confirmEmailVerification
+      summary: Confirm an email verification token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmailVerificationConfirmRequest"
+      responses:
+        "200":
+          description: Email verified
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmailVerificationResponse"
+        "400":
+          $ref: "#/components/responses/InvalidToken"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+
+  /auth/email-verification/resend:
+    post:
+      tags: [Authentication]
+      operationId: resendEmailVerification
+      summary: Resend the email verification message
+      responses:
+        "202":
+          description: Verification email accepted for delivery
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /auth/password-reset/request:
+    post:
+      tags: [Authentication]
+      operationId: requestPasswordReset
+      summary: Request a password reset message
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PasswordResetRequest"
+      responses:
+        "202":
+          description: Request accepted; the response is identical for known and unknown emails
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /auth/password-reset/confirm:
+    post:
+      tags: [Authentication]
+      operationId: confirmPasswordReset
+      summary: Consume a password reset token and set a new password
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PasswordResetConfirmRequest"
+      responses:
+        "204":
+          description: Password changed and all sessions revoked
+        "400":
+          $ref: "#/components/responses/InvalidToken"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+
+  /auth/sessions:
+    get:
+      tags: [Authentication]
+      operationId: listSessions
+      summary: List refresh sessions for the current user
+      responses:
+        "200":
+          description: Sessions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    delete:
+      tags: [Authentication]
+      operationId: revokeOtherSessions
+      summary: Revoke every session except the current one
+      responses:
+        "204":
+          description: Other sessions revoked
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /auth/sessions/{sessionId}:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+    delete:
+      tags: [Authentication]
+      operationId: revokeSession
+      summary: Revoke one owned session
+      responses:
+        "204":
+          description: Session revoked
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   /me:
     get:
@@ -242,6 +364,78 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "409":
           $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /me/consents:
+    get:
+      tags: [Profile]
+      operationId: getConsents
+      summary: Get adult confirmation, legal acceptance, and sensitive memory consent
+      responses:
+        "200":
+          description: Consent state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConsentResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    put:
+      tags: [Profile]
+      operationId: updateConsents
+      summary: Record adult confirmation and legal acceptance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateConsentsRequest"
+      responses:
+        "200":
+          description: Consent state updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConsentResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /me/entitlements:
+    get:
+      tags: [Profile]
+      operationId: getEntitlement
+      summary: Get the current plan and entitlement state
+      responses:
+        "200":
+          description: Entitlement
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EntitlementResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /me/export:
+    get:
+      tags: [Profile]
+      operationId: exportUserData
+      summary: Export the user's data as a JSON file
+      responses:
+        "200":
+          description: User data export
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserDataExport"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "429":
           $ref: "#/components/responses/RateLimited"
 
@@ -981,6 +1175,14 @@ components:
         type: string
         format: uuid
 
+    SessionId:
+      name: sessionId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
     Cursor:
       name: cursor
       in: query
@@ -1022,6 +1224,20 @@ components:
         minimum: 1
 
   responses:
+    EmailNotVerified:
+      description: Email verification is required before signing in
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+    InvalidToken:
+      description: The single-use token is invalid or expired
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
     BadRequest:
       description: Invalid request
       content:
@@ -1170,7 +1386,7 @@ components:
 
     User:
       type: object
-      required: [id, email, created_at]
+      required: [id, email, email_verified, created_at]
       properties:
         id:
           type: string
@@ -1178,6 +1394,11 @@ components:
         email:
           type: string
           format: email
+        email_verified:
+          type: boolean
+        email_verified_at:
+          type: [string, "null"]
+          format: date-time
         created_at:
           type: string
           format: date-time
@@ -2054,3 +2275,173 @@ components:
       properties:
         granted:
           type: boolean
+
+    EmailVerificationConfirmRequest:
+      type: object
+      required: [token]
+      properties:
+        token:
+          type: string
+          maxLength: 512
+
+    EmailVerificationResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [email_verified]
+          properties:
+            email_verified:
+              type: boolean
+
+    PasswordResetRequest:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+
+    PasswordResetConfirmRequest:
+      type: object
+      required: [token, new_password]
+      properties:
+        token:
+          type: string
+          maxLength: 512
+        new_password:
+          type: string
+          minLength: 8
+          maxLength: 1024
+
+    Session:
+      type: object
+      required: [id, created_at, expires_at, current]
+      properties:
+        id:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        last_used_at:
+          type: [string, "null"]
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        revoked_at:
+          type: [string, "null"]
+          format: date-time
+        current:
+          type: boolean
+
+    SessionListResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Session"
+
+    Consent:
+      type: object
+      required:
+        - adult_confirmed
+        - adult_confirmed_at
+        - terms_accepted
+        - terms_version
+        - terms_accepted_at
+        - privacy_accepted
+        - privacy_version
+        - privacy_accepted_at
+        - sensitive_memory_granted
+        - sensitive_memory_updated_at
+      properties:
+        adult_confirmed:
+          type: boolean
+        adult_confirmed_at:
+          type: [string, "null"]
+          format: date-time
+        terms_accepted:
+          type: boolean
+        terms_version:
+          type: [string, "null"]
+        terms_accepted_at:
+          type: [string, "null"]
+          format: date-time
+        privacy_accepted:
+          type: boolean
+        privacy_version:
+          type: [string, "null"]
+        privacy_accepted_at:
+          type: [string, "null"]
+          format: date-time
+        sensitive_memory_granted:
+          type: boolean
+        sensitive_memory_updated_at:
+          type: [string, "null"]
+          format: date-time
+
+    ConsentResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/Consent"
+
+    UpdateConsentsRequest:
+      type: object
+      properties:
+        adult_confirmed:
+          type: boolean
+        terms_version:
+          type: string
+          maxLength: 20
+        privacy_version:
+          type: string
+          maxLength: 20
+
+    Entitlement:
+      type: object
+      required: [plan, status, created_at, updated_at]
+      properties:
+        plan:
+          type: string
+          enum: [free, premium]
+        status:
+          type: string
+          enum: [active, past_due, canceled]
+        current_period_end:
+          type: [string, "null"]
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    EntitlementResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/Entitlement"
+
+    UserDataExport:
+      type: object
+      additionalProperties: true
+      required: [schema_version, exported_at, account]
+      properties:
+        schema_version:
+          type: string
+        exported_at:
+          type: string
+          format: date-time
+        account:
+          type: object
+          additionalProperties: true

@@ -1,6 +1,6 @@
 # SELA Roadmap
 
-Version: 1.3
+Version: 1.4
 
 Status: Phase 0 complete; backend Phase 2 frozen; mobile Phase 1 code complete; pre-beta
 
@@ -237,6 +237,28 @@ Rules:
 - Do not add Redis, microservices, or a separate inference service without evidence.
 - Do not enable multi-device sync before conflict and deletion behavior is tested.
 - Do not cache sensitive AI content locally without encryption and a retention policy.
+
+## 7A. Pre-public Backend Gate
+
+Core backend complete:
+
+- Email verification and resend.
+- Password reset with session revocation.
+- Session inventory and revocation.
+- Data export.
+- Adult confirmation and legal acceptance.
+- Entitlement state.
+- Manual entitlement support commands.
+
+External gates:
+
+- Payment provider and signed webhooks.
+- Premium limit enforcement.
+- Admin roles/API and support console.
+- Legal review of age/consent policy.
+- Privacy policy, terms, and deletion disclosure.
+- Crisis-resource review.
+- External penetration test.
 
 ## 8. Offline Strategy
 

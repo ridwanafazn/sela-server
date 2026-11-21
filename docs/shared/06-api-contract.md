@@ -1,8 +1,8 @@
 # SELA API Contract
 
-Version: 1.4
+Version: 1.5
 
-Status: P0 decisions locked, with 2026-11-21 product vision decisions
+Status: P0 decisions locked, with 2026-11-21 product vision and pre-public decisions
 
 > Scope note: scheduled insight preferences and sensitive memory consent are
 > part of the MVP contract. Per-entry journal analysis is post-MVP and is not an
@@ -359,7 +359,24 @@ Contract requirements:
 - Local journal data and keys MUST be removed on logout and after account deletion.
 - Drafts MUST NOT be sent to AI processing until they are published and synchronized as active.
 
-## 14. Contract Governance
+## 14. Pre-public Account Security
+
+Rules for the account security endpoints defined in `openapi.yaml`:
+
+- Email verification and password-reset tokens are single-use, time-limited,
+  and stored only as hashes.
+- Password reset requests return the same response for known and unknown
+  emails.
+- Confirming a password reset revokes every active session.
+- Session inventory responses MUST NOT include refresh-token hashes.
+- Data export MUST NOT include password hashes, refresh-token hashes, or
+  single-use token hashes.
+- Adult confirmation and legal acceptance record the accepted document
+  version; a stale version is rejected.
+- Entitlement state is provider-independent. Premium enforcement is not part
+  of this contract phase.
+
+## 15. Contract Governance
 
 Before an endpoint is considered implementation-ready:
 

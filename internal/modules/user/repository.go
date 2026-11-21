@@ -90,7 +90,7 @@ func getMe(db *gorm.DB, userID string) (*Me, error) {
 	var me Me
 
 	row := db.Raw(
-		`SELECT u.id, u.email, u.created_at,
+		`SELECT u.id, u.email, u.email_verified_at, u.created_at,
 		        p.display_name, p.language, p.timezone, p.communication_style
 		 FROM users u
 		 JOIN profiles p ON p.user_id = u.id
@@ -101,6 +101,7 @@ func getMe(db *gorm.DB, userID string) (*Me, error) {
 	if err := row.Scan(
 		&me.UserID,
 		&me.Email,
+		&me.EmailVerifiedAt,
 		&me.UserCreatedAt,
 		&me.DisplayName,
 		&me.Language,

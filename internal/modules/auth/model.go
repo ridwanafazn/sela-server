@@ -45,6 +45,32 @@ func (Session) TableName() string {
 	return "auth_sessions"
 }
 
+// AuthToken is a single-use email verification or password reset token.
+type AuthToken struct {
+	ID        string     `gorm:"column:id;primaryKey;type:uuid"`
+	UserID    string     `gorm:"column:user_id;type:uuid"`
+	Purpose   string     `gorm:"column:purpose"`
+	TokenHash string     `gorm:"column:token_hash"`
+	ExpiresAt time.Time  `gorm:"column:expires_at"`
+	UsedAt    *time.Time `gorm:"column:used_at"`
+	CreatedAt time.Time  `gorm:"column:created_at"`
+}
+
+// TableName pins the table name.
+func (AuthToken) TableName() string {
+	return "auth_tokens"
+}
+
+// SessionView is the API representation of one refresh session.
+type SessionView struct {
+	ID         string     `json:"id"`
+	CreatedAt  time.Time  `json:"created_at"`
+	LastUsedAt *time.Time `json:"last_used_at"`
+	ExpiresAt  time.Time  `json:"expires_at"`
+	RevokedAt  *time.Time `json:"revoked_at"`
+	Current    bool       `json:"current"`
+}
+
 // SessionPrincipal is the joined session and user state used by the
 // authentication middleware on every protected request.
 type SessionPrincipal struct {

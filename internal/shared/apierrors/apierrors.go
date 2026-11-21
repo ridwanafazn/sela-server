@@ -14,6 +14,8 @@ const (
 	CodeValidation             = "VALIDATION_ERROR"
 	CodeUnauthenticated        = "UNAUTHENTICATED"
 	CodeInvalidCredentials     = "INVALID_CREDENTIALS"
+	CodeEmailNotVerified       = "EMAIL_NOT_VERIFIED"
+	CodeInvalidToken           = "INVALID_TOKEN"
 	CodeNotFound               = "NOT_FOUND"
 	CodeConflict               = "CONFLICT"
 	CodeVersionConflict        = "VERSION_CONFLICT"
@@ -69,6 +71,17 @@ func Validation(message string, details ...Detail) *Error {
 // Unauthenticated creates a 401 error for missing or invalid credentials.
 func Unauthenticated(message string) *Error {
 	return New(http.StatusUnauthorized, CodeUnauthenticated, message)
+}
+
+// EmailNotVerified creates a 403 error for an account that must verify its
+// email before signing in.
+func EmailNotVerified() *Error {
+	return New(http.StatusForbidden, CodeEmailNotVerified, "Verify your email before signing in.")
+}
+
+// InvalidToken creates a 400 error for an expired or invalid single-use token.
+func InvalidToken() *Error {
+	return New(http.StatusBadRequest, CodeInvalidToken, "The token is invalid or has expired.")
 }
 
 // NotFound creates a 404 error. It is also used for resources owned by

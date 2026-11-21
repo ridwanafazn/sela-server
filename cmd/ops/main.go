@@ -8,6 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 	"text/tabwriter"
 	"time"
 
@@ -25,7 +26,7 @@ func main() {
 
 func run(args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: ops <health|usage|stale-memories>")
+		return fmt.Errorf("usage: ops <health|usage|stale-memories|user|grant|revoke>")
 	}
 
 	cfg, err := config.Load()
@@ -50,6 +51,12 @@ func run(args []string) error {
 		return usageCommand(ctx, db, args[1:])
 	case "stale-memories":
 		return staleMemoriesCommand(ctx, db, args[1:])
+	case "user":
+		return userCommand(ctx, db, args[1:])
+	case "grant":
+		return grantCommand(ctx, db, args[1:])
+	case "revoke":
+		return revokeCommand(ctx, db, args[1:])
 	default:
 		return fmt.Errorf("unknown command %q", args[0])
 	}
@@ -234,6 +241,142 @@ func usageCommand(ctx context.Context, db *database.DB, args []string) error {
 		fmt.Fprintf(w, "%s\t%s\t%d\t%d\t%d\t%.6f\t%d\n", row.Day, row.Operation, row.Calls, row.InputTokens, row.OutputTokens, row.CostUSD, row.Failures)
 	}
 	return w.Flush()
+}
+
+type userRow struct {
+	ID              string     `json:"id"`
+	Email           string     `json:"email"`
+	Status          string     `json:"status"`
+	EmailVerifiedAt *time.Time `json:"email_verified_at"`
+	DisplayName     *string    `json:"display_name"`
+	Plan            string     `json:"plan"`
+	Entitlement     string     `json:"entitlement_status"`
+	PeriodEnd       *time.Time `json:"current_period_end"`
+}
+
+func userCommand(ctx context.Context, db *database.DB, args []string) error {
+	flags := flag.NewFlagSet("user", flag.ContinueOnError)
+	email := flags.String("email", "", "user email")
+	asJSON := flags.Bool("json", false, "print JSON")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if strings.TrimSpace(*email) == "" {
+		return fmt.Errorf("email is required")
+	}
+
+	var row userRow
+	if err := db.SQL.QueryRowContext(ctx,
+		`SELECT u.id, u.email, u.status, u.email_verified_at, p.display_name,
+		        COALESCE(e.plan, 'free'), COALESCE(e.status, 'active'), e.current_period_end
+		 FROM users u
+		 JOIN profiles p ON p.user_id = u.id
+		 LEFT JOIN user_entitlements e ON e.user_id = u.id
+		 WHERE u.email = $1`,
+		strings.ToLower(strings.TrimSpace(*email)),
+	).Scan(&row.ID, &row.Email, &row.Status, &row.EmailVerifiedAt, &row.DisplayName,
+		&row.Plan, &row.Entitlement, &row.PeriodEnd); err != nil {
+		return fmt.Errorf("load user: %w", err)
+	}
+
+	if *asJSON {
+		encoded, _ := json.MarshalIndent(row, "", "  ")
+		fmt.Println(string(encoded))
+		return nil
+	}
+	fmt.Printf("id=%s email=%s status=%s email_verified=%t plan=%s entitlement=%s\n",
+		row.ID, row.Email, row.Status, row.EmailVerifiedAt != nil, row.Plan, row.Entitlement)
+	if row.DisplayName != nil {
+		fmt.Printf("display_name=%s\n", *row.DisplayName)
+	}
+	if row.PeriodEnd != nil {
+		fmt.Printf("current_period_end=%s\n", row.PeriodEnd.Format(time.RFC3339))
+	}
+	return nil
+}
+
+func grantCommand(ctx context.Context, db *database.DB, args []string) error {
+	flags := flag.NewFlagSet("grant", flag.ContinueOnError)
+	email := flags.String("email", "", "user email")
+	plan := flags.String("plan", "premium", "free or premium")
+	days := flags.Int("days", 30, "entitlement duration in days")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if strings.TrimSpace(*email) == "" {
+		return fmt.Errorf("email is required")
+	}
+	if *plan != "free" && *plan != "premium" {
+		return fmt.Errorf("plan must be free or premium")
+	}
+	if *days < 0 || *days > 3650 {
+		return fmt.Errorf("days must be between 0 and 3650")
+	}
+
+	var userID string
+	if err := db.SQL.QueryRowContext(ctx,
+		`SELECT id FROM users WHERE email = $1`,
+		strings.ToLower(strings.TrimSpace(*email)),
+	).Scan(&userID); err != nil {
+		return fmt.Errorf("find user: %w", err)
+	}
+
+	now := time.Now().UTC()
+	var periodEnd *time.Time
+	if *days > 0 {
+		value := now.AddDate(0, 0, *days)
+		periodEnd = &value
+	}
+	if err := db.Gorm.WithContext(ctx).Exec(
+		`INSERT INTO user_entitlements
+		 (user_id, plan, status, current_period_end, created_at, updated_at)
+		 VALUES (?, ?, 'active', ?, ?, ?)
+		 ON CONFLICT (user_id) DO UPDATE SET
+		   plan = EXCLUDED.plan,
+		   status = EXCLUDED.status,
+		   current_period_end = EXCLUDED.current_period_end,
+		   updated_at = EXCLUDED.updated_at`,
+		userID, *plan, periodEnd, now, now,
+	).Error; err != nil {
+		return fmt.Errorf("grant entitlement: %w", err)
+	}
+	fmt.Printf("entitlement updated: email=%s plan=%s days=%d\n", *email, *plan, *days)
+	return nil
+}
+
+func revokeCommand(ctx context.Context, db *database.DB, args []string) error {
+	flags := flag.NewFlagSet("revoke", flag.ContinueOnError)
+	email := flags.String("email", "", "user email")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if strings.TrimSpace(*email) == "" {
+		return fmt.Errorf("email is required")
+	}
+
+	var userID string
+	if err := db.SQL.QueryRowContext(ctx,
+		`SELECT id FROM users WHERE email = $1`,
+		strings.ToLower(strings.TrimSpace(*email)),
+	).Scan(&userID); err != nil {
+		return fmt.Errorf("find user: %w", err)
+	}
+	now := time.Now().UTC()
+	if err := db.Gorm.WithContext(ctx).Exec(
+		`INSERT INTO user_entitlements
+		 (user_id, plan, status, current_period_end, created_at, updated_at)
+		 VALUES (?, 'free', 'active', NULL, ?, ?)
+		 ON CONFLICT (user_id) DO UPDATE SET
+		   plan = 'free',
+		   status = 'active',
+		   current_period_end = NULL,
+		   updated_at = EXCLUDED.updated_at`,
+		userID, now, now,
+	).Error; err != nil {
+		return fmt.Errorf("revoke entitlement: %w", err)
+	}
+	fmt.Printf("entitlement revoked: email=%s plan=free\n", *email)
+	return nil
 }
 
 func staleMemoriesCommand(ctx context.Context, db *database.DB, args []string) error {

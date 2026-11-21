@@ -10,9 +10,11 @@ type updateMeRequest struct {
 }
 
 type userDTO struct {
-	ID        string    `json:"id"`
-	Email     string    `json:"email"`
-	CreatedAt time.Time `json:"created_at"`
+	ID              string     `json:"id"`
+	Email           string     `json:"email"`
+	EmailVerified   bool       `json:"email_verified"`
+	EmailVerifiedAt *time.Time `json:"email_verified_at"`
+	CreatedAt       time.Time  `json:"created_at"`
 }
 
 type profileDTO struct {
@@ -30,9 +32,11 @@ type meDTO struct {
 func newMeDTO(me *Me) meDTO {
 	return meDTO{
 		User: userDTO{
-			ID:        me.UserID,
-			Email:     me.Email,
-			CreatedAt: me.UserCreatedAt,
+			ID:              me.UserID,
+			Email:           me.Email,
+			EmailVerified:   me.EmailVerifiedAt != nil,
+			EmailVerifiedAt: me.EmailVerifiedAt,
+			CreatedAt:       me.UserCreatedAt,
 		},
 		Profile: profileDTO{
 			DisplayName:        me.DisplayName,

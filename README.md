@@ -21,14 +21,15 @@ Our philosophy:
 
 Backend Phase 2 is complete and frozen at `v0.2.0`.
 
-- API contract: OpenAPI `1.4.0`.
-- Database schema: migration version `17` (pre-beta addendum).
+- API contract: OpenAPI `1.5.0`.
+- Database schema: migration version `18` (pre-beta and pre-public addenda).
 - Release notes: `CHANGELOG.md`.
 - Session handoff: `HANDOFF.md`.
 - Staging validation: `docs/backend/14-staging-validation.md`.
 - Staging without GCP: `docs/backend/15-staging-without-gcp.md`.
 - Beta hardening: `docs/backend/16-beta-hardening.md`.
 - Offline sync backend: `docs/backend/17-offline-sync.md`.
+- Pre-public backend: `docs/backend/18-prepublic.md`.
 - Freeze checklist and next inputs: `docs/backend/10-phase-2-freeze.md`.
 - Active focus phase: `docs/backend/11-focus-phase.md`.
 

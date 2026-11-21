@@ -35,6 +35,15 @@ func (r *Repository) FindUserByEmail(ctx context.Context, email string) (*User, 
 	return &user, nil
 }
 
+// FindUserByID returns the user with the given ID.
+func (r *Repository) FindUserByID(ctx context.Context, id string) (*User, error) {
+	var user User
+	if err := r.db.WithContext(ctx).Where("id = ?", id).Take(&user).Error; err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+
 // FindUserByIDTx returns the user with the given ID inside a transaction.
 func (r *Repository) FindUserByIDTx(tx *gorm.DB, id string) (*User, error) {
 	var user User
@@ -142,4 +151,104 @@ func (r *Repository) MarkReplaced(tx *gorm.DB, oldSessionID, newSessionID string
 		`UPDATE auth_sessions SET replaced_by = ?, last_used_at = ? WHERE id = ?`,
 		newSessionID, time.Now().UTC(), oldSessionID,
 	).Error
+}
+
+// CreateAuthTokenTx inserts a single-use token inside a transaction.
+func (r *Repository) CreateAuthTokenTx(tx *gorm.DB, token *AuthToken) error {
+	return tx.Create(token).Error
+}
+
+// FindAuthTokenTx locks and returns a matching token.
+func (r *Repository) FindAuthTokenTx(tx *gorm.DB, purpose, tokenHash string) (*AuthToken, error) {
+	var token AuthToken
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where("purpose = ? AND token_hash = ?", purpose, tokenHash).
+		Take(&token).Error; err != nil {
+		return nil, err
+	}
+	return &token, nil
+}
+
+// MarkAuthTokenUsedTx marks a token as consumed.
+func (r *Repository) MarkAuthTokenUsedTx(tx *gorm.DB, tokenID string, now time.Time) error {
+	return tx.Exec(
+		`UPDATE auth_tokens SET used_at = ? WHERE id = ? AND used_at IS NULL`,
+		now, tokenID,
+	).Error
+}
+
+// InvalidateAuthTokensTx invalidates all unused tokens for a purpose.
+func (r *Repository) InvalidateAuthTokensTx(tx *gorm.DB, userID, purpose string, now time.Time) error {
+	return tx.Exec(
+		`UPDATE auth_tokens SET used_at = ? WHERE user_id = ? AND purpose = ? AND used_at IS NULL`,
+		now, userID, purpose,
+	).Error
+}
+
+// SetEmailVerifiedTx marks the user's email as verified.
+func (r *Repository) SetEmailVerifiedTx(tx *gorm.DB, userID string, now time.Time) error {
+	return tx.Exec(
+		`UPDATE users SET email_verified_at = COALESCE(email_verified_at, ?), updated_at = ? WHERE id = ?`,
+		now, now, userID,
+	).Error
+}
+
+// UpdatePasswordTx replaces the password hash.
+func (r *Repository) UpdatePasswordTx(tx *gorm.DB, userID, passwordHash string, now time.Time) error {
+	return tx.Exec(
+		`UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?`,
+		passwordHash, now, userID,
+	).Error
+}
+
+// RevokeAllSessionsTx revokes every active session for a user.
+func (r *Repository) RevokeAllSessionsTx(tx *gorm.DB, userID string, now time.Time) error {
+	return tx.Exec(
+		`UPDATE auth_sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL`,
+		now, userID,
+	).Error
+}
+
+// ListSessions returns the user's refresh sessions, newest first.
+func (r *Repository) ListSessions(ctx context.Context, userID, currentSessionID string) ([]SessionView, error) {
+	var sessions []SessionView
+	if err := r.db.WithContext(ctx).Raw(
+		`SELECT id, created_at, last_used_at, expires_at, revoked_at,
+		        (id = ?::uuid) AS current
+		 FROM auth_sessions
+		 WHERE user_id = ?
+		 ORDER BY created_at DESC, id DESC`,
+		currentSessionID, userID,
+	).Scan(&sessions).Error; err != nil {
+		return nil, err
+	}
+	return sessions, nil
+}
+
+// RevokeOtherSessions revokes every session except the current one.
+func (r *Repository) RevokeOtherSessions(ctx context.Context, userID, currentSessionID string, now time.Time) (int64, error) {
+	result := r.db.WithContext(ctx).Exec(
+		`UPDATE auth_sessions
+		 SET revoked_at = ?
+		 WHERE user_id = ? AND id <> ? AND revoked_at IS NULL`,
+		now, userID, currentSessionID,
+	)
+	if result.Error != nil {
+		return 0, result.Error
+	}
+	return result.RowsAffected, nil
+}
+
+// RevokeOwnedSession revokes one session owned by the user.
+func (r *Repository) RevokeOwnedSession(ctx context.Context, userID, sessionID string, now time.Time) (bool, error) {
+	result := r.db.WithContext(ctx).Exec(
+		`UPDATE auth_sessions
+		 SET revoked_at = ?
+		 WHERE id = ? AND user_id = ? AND revoked_at IS NULL`,
+		now, sessionID, userID,
+	)
+	if result.Error != nil {
+		return false, result.Error
+	}
+	return result.RowsAffected > 0, nil
 }

@@ -3,17 +3,32 @@ package auth
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"gorm.io/gorm"
 
+	"github.com/ridwanafazn/sela-server/internal/platform/mailer"
 	"github.com/ridwanafazn/sela-server/internal/platform/ratelimit"
 	"github.com/ridwanafazn/sela-server/internal/shared/apierrors"
 	"github.com/ridwanafazn/sela-server/internal/shared/authn"
 	"github.com/ridwanafazn/sela-server/internal/shared/ids"
 	"github.com/ridwanafazn/sela-server/internal/shared/requestid"
+)
+
+const (
+	purposeEmailVerification = "email_verification"
+	purposePasswordReset     = "password_reset"
+	emailVerificationTTL     = 24 * time.Hour
+	passwordResetTTL         = time.Hour
+	minPasswordLength        = 8
+	maxPasswordLength        = 1024
+	actionEmailVerification  = "auth.email_verification"
+	actionPasswordResetIP    = "auth.password_reset.ip"
+	actionPasswordResetUser  = "auth.password_reset.account"
 )
 
 // Rate-limit actions and windows.
@@ -37,10 +52,13 @@ var (
 
 // Limits are the per-action authentication thresholds.
 type Limits struct {
-	LoginPerMinuteIP    int
-	LoginPerHourAccount int
-	RegisterPerHourIP   int
-	RefreshPerMinuteIP  int
+	LoginPerMinuteIP             int
+	LoginPerHourAccount          int
+	RegisterPerHourIP            int
+	RefreshPerMinuteIP           int
+	PasswordResetPerHourIP       int
+	PasswordResetPerHourAccount  int
+	EmailVerificationPerHourUser int
 }
 
 // RegisterInput is a validated registration request.
@@ -66,13 +84,16 @@ type AuthResult struct {
 
 // Service implements authentication and session lifecycle.
 type Service struct {
-	repo       *Repository
-	tokens     *TokenManager
-	passwords  *PasswordHasher
-	limiter    *ratelimit.Limiter
-	limits     Limits
-	refreshTTL time.Duration
-	log        *slog.Logger
+	repo                     *Repository
+	tokens                   *TokenManager
+	passwords                *PasswordHasher
+	limiter                  *ratelimit.Limiter
+	limits                   Limits
+	refreshTTL               time.Duration
+	log                      *slog.Logger
+	mailer                   mailer.Sender
+	requireEmailVerification bool
+	now                      func() time.Time
 }
 
 // NewService creates the authentication service.
@@ -97,7 +118,15 @@ func NewService(
 		limits:     limits,
 		refreshTTL: refreshTTL,
 		log:        log,
+		now:        time.Now,
 	}
+}
+
+// WithEmail configures verification and password-reset delivery.
+func (s *Service) WithEmail(sender mailer.Sender, requireVerification bool) *Service {
+	s.mailer = sender
+	s.requireEmailVerification = requireVerification
+	return s
 }
 
 // Register creates the account, profile, and first session atomically.
@@ -174,6 +203,16 @@ func (s *Service) Register(ctx context.Context, clientIP string, input RegisterI
 		return nil, err
 	}
 
+	if s.mailer != nil {
+		if err := s.sendEmailVerification(ctx, user); err != nil {
+			s.log.WarnContext(ctx, "email verification delivery failed",
+				slog.String("request_id", requestid.From(ctx)),
+				slog.String("user_id", userID),
+				slog.String("error", err.Error()),
+			)
+		}
+	}
+
 	s.log.InfoContext(ctx, "user registered",
 		slog.String("request_id", requestid.From(ctx)),
 		slog.String("user_id", userID),
@@ -207,6 +246,9 @@ func (s *Service) Login(ctx context.Context, clientIP string, input LoginInput) 
 	valid := s.passwords.Verify(input.Password, user.PasswordHash)
 	if !valid || user.Status != UserStatusActive || user.DeletedAt != nil {
 		return nil, errInvalidCredentials
+	}
+	if s.requireEmailVerification && user.EmailVerifiedAt == nil {
+		return nil, apierrors.EmailNotVerified()
 	}
 
 	sessionID, err := ids.New()
@@ -396,6 +438,244 @@ func (s *Service) Logout(ctx context.Context, principal authn.Principal) error {
 	return nil
 }
 
+// RequestEmailVerification sends a fresh verification token.
+func (s *Service) RequestEmailVerification(ctx context.Context, userID string) error {
+	if err := s.enforce(ctx, actionEmailVerification, userID, s.limits.EmailVerificationPerHourUser, time.Hour); err != nil {
+		return err
+	}
+	user, err := s.repo.FindUserByID(ctx, userID)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return errUnauthenticated
+	}
+	if err != nil {
+		return err
+	}
+	if user.EmailVerifiedAt != nil {
+		return nil
+	}
+	return s.sendEmailVerification(ctx, user)
+}
+
+// ConfirmEmailVerification consumes a verification token.
+func (s *Service) ConfirmEmailVerification(ctx context.Context, rawToken string) error {
+	if strings.TrimSpace(rawToken) == "" {
+		return apierrors.InvalidToken()
+	}
+	now := s.now().UTC()
+	hash := HashActionToken(rawToken)
+
+	return s.repo.Transaction(ctx, func(tx *gorm.DB) error {
+		token, err := s.repo.FindAuthTokenTx(tx, purposeEmailVerification, hash)
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return apierrors.InvalidToken()
+		}
+		if err != nil {
+			return err
+		}
+		if token.UsedAt != nil || !token.ExpiresAt.After(now) {
+			return apierrors.InvalidToken()
+		}
+		if err := s.repo.MarkAuthTokenUsedTx(tx, token.ID, now); err != nil {
+			return err
+		}
+		return s.repo.SetEmailVerifiedTx(tx, token.UserID, now)
+	})
+}
+
+// RequestPasswordReset sends a reset token when the account exists. The
+// response is intentionally identical for unknown emails.
+func (s *Service) RequestPasswordReset(ctx context.Context, clientIP, email string) error {
+	email = normalizeEmail(email)
+	if err := s.enforce(ctx, actionPasswordResetIP, clientIP, s.limits.PasswordResetPerHourIP, time.Hour); err != nil {
+		return err
+	}
+	if err := s.enforce(ctx, actionPasswordResetUser, email, s.limits.PasswordResetPerHourAccount, time.Hour); err != nil {
+		return err
+	}
+
+	user, err := s.repo.FindUserByEmail(ctx, email)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if user.Status != UserStatusActive || user.DeletedAt != nil {
+		return nil
+	}
+	return s.sendPasswordReset(ctx, user)
+}
+
+// ConfirmPasswordReset consumes a reset token, changes the password, and
+// revokes every active session.
+func (s *Service) ConfirmPasswordReset(ctx context.Context, rawToken, newPassword string) error {
+	if strings.TrimSpace(rawToken) == "" {
+		return apierrors.InvalidToken()
+	}
+	if err := validateNewPassword(newPassword); err != nil {
+		return err
+	}
+	passwordHash, err := s.passwords.Hash(newPassword)
+	if err != nil {
+		return err
+	}
+
+	now := s.now().UTC()
+	hash := HashActionToken(rawToken)
+
+	return s.repo.Transaction(ctx, func(tx *gorm.DB) error {
+		token, err := s.repo.FindAuthTokenTx(tx, purposePasswordReset, hash)
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return apierrors.InvalidToken()
+		}
+		if err != nil {
+			return err
+		}
+		if token.UsedAt != nil || !token.ExpiresAt.After(now) {
+			return apierrors.InvalidToken()
+		}
+		if err := s.repo.MarkAuthTokenUsedTx(tx, token.ID, now); err != nil {
+			return err
+		}
+		if err := s.repo.UpdatePasswordTx(tx, token.UserID, passwordHash, now); err != nil {
+			return err
+		}
+		if err := s.repo.RevokeAllSessionsTx(tx, token.UserID, now); err != nil {
+			return err
+		}
+		return s.repo.InvalidateAuthTokensTx(tx, token.UserID, purposePasswordReset, now)
+	})
+}
+
+// Sessions returns the current user's refresh sessions.
+func (s *Service) Sessions(ctx context.Context, principal authn.Principal) ([]SessionView, error) {
+	return s.repo.ListSessions(ctx, principal.UserID, principal.SessionID)
+}
+
+// RevokeOtherSessions revokes every session except the current one.
+func (s *Service) RevokeOtherSessions(ctx context.Context, principal authn.Principal) (int64, error) {
+	return s.repo.RevokeOtherSessions(ctx, principal.UserID, principal.SessionID, s.now().UTC())
+}
+
+// RevokeSession revokes one owned session.
+func (s *Service) RevokeSession(ctx context.Context, principal authn.Principal, sessionID string) error {
+	revoked, err := s.repo.RevokeOwnedSession(ctx, principal.UserID, sessionID, s.now().UTC())
+	if err != nil {
+		return err
+	}
+	if !revoked {
+		return apierrors.NotFound("The session was not found.")
+	}
+	return nil
+}
+
+func (s *Service) sendEmailVerification(ctx context.Context, user *User) error {
+	if s.mailer == nil {
+		return fmt.Errorf("email sender is not configured")
+	}
+
+	now := s.now().UTC()
+	raw, hash, err := NewActionToken()
+	if err != nil {
+		return err
+	}
+	id, err := ids.New()
+	if err != nil {
+		return err
+	}
+
+	err = s.repo.Transaction(ctx, func(tx *gorm.DB) error {
+		if err := s.repo.InvalidateAuthTokensTx(tx, user.ID, purposeEmailVerification, now); err != nil {
+			return err
+		}
+		return s.repo.CreateAuthTokenTx(tx, &AuthToken{
+			ID:        id,
+			UserID:    user.ID,
+			Purpose:   purposeEmailVerification,
+			TokenHash: hash,
+			ExpiresAt: now.Add(emailVerificationTTL),
+			CreatedAt: now,
+		})
+	})
+	if err != nil {
+		return err
+	}
+
+	text := fmt.Sprintf(
+		"Verify your SELA email within 24 hours.\n\nToken: %s\n\nIf you did not create this account, ignore this message.",
+		raw,
+	)
+	return s.mailer.Send(ctx, mailer.Message{
+		To:      user.Email,
+		Subject: "Verify your SELA email",
+		Text:    text,
+		SentAt:  now,
+	})
+}
+
+func (s *Service) sendPasswordReset(ctx context.Context, user *User) error {
+	if s.mailer == nil {
+		return fmt.Errorf("email sender is not configured")
+	}
+
+	now := s.now().UTC()
+	raw, hash, err := NewActionToken()
+	if err != nil {
+		return err
+	}
+	id, err := ids.New()
+	if err != nil {
+		return err
+	}
+
+	err = s.repo.Transaction(ctx, func(tx *gorm.DB) error {
+		if err := s.repo.InvalidateAuthTokensTx(tx, user.ID, purposePasswordReset, now); err != nil {
+			return err
+		}
+		return s.repo.CreateAuthTokenTx(tx, &AuthToken{
+			ID:        id,
+			UserID:    user.ID,
+			Purpose:   purposePasswordReset,
+			TokenHash: hash,
+			ExpiresAt: now.Add(passwordResetTTL),
+			CreatedAt: now,
+		})
+	})
+	if err != nil {
+		return err
+	}
+
+	text := fmt.Sprintf(
+		"Reset your SELA password within 1 hour.\n\nToken: %s\n\nIf you did not request this, ignore this message.",
+		raw,
+	)
+	return s.mailer.Send(ctx, mailer.Message{
+		To:      user.Email,
+		Subject: "Reset your SELA password",
+		Text:    text,
+		SentAt:  now,
+	})
+}
+
+func validateNewPassword(password string) error {
+	length := utf8.RuneCountInString(password)
+	if length < minPasswordLength {
+		return apierrors.Validation("The request is invalid.", apierrors.Detail{
+			Field:   "password",
+			Code:    "TOO_SHORT",
+			Message: fmt.Sprintf("Password must be at least %d characters.", minPasswordLength),
+		})
+	}
+	if length > maxPasswordLength {
+		return apierrors.Validation("The request is invalid.", apierrors.Detail{
+			Field:   "password",
+			Code:    "TOO_LONG",
+			Message: "Password is too long.",
+		})
+	}
+	return nil
+}
+
 // ParseAccessToken validates an access token.
 func (s *Service) ParseAccessToken(raw string) (*Claims, error) {
 	return s.tokens.Parse(raw)
@@ -448,6 +728,9 @@ func (s *Service) checkLoginLimits(ctx context.Context, clientIP, email string) 
 }
 
 func (s *Service) enforce(ctx context.Context, action, subject string, limit int, window time.Duration) error {
+	if s.limiter == nil {
+		return nil
+	}
 	decision, err := s.limiter.Check(ctx, action, subject, limit, window)
 	if err != nil {
 		return err

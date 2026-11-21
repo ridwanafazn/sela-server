@@ -21,6 +21,7 @@ type OptionalString = optional.String
 type Me struct {
 	UserID             string
 	Email              string
+	EmailVerifiedAt    *time.Time
 	UserCreatedAt      time.Time
 	DisplayName        *string
 	Language           string

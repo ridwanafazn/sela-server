@@ -62,9 +62,11 @@ type authEnvelope struct {
 
 type mePayload struct {
 	User struct {
-		ID        string    `json:"id"`
-		Email     string    `json:"email"`
-		CreatedAt time.Time `json:"created_at"`
+		ID              string     `json:"id"`
+		Email           string     `json:"email"`
+		EmailVerified   bool       `json:"email_verified"`
+		EmailVerifiedAt *time.Time `json:"email_verified_at"`
+		CreatedAt       time.Time  `json:"created_at"`
 	} `json:"user"`
 	Profile struct {
 		DisplayName        *string `json:"display_name"`
@@ -120,17 +122,21 @@ func testConfig() *config.Config {
 			Audience:     "sela-mobile",
 		},
 		RateLimit: config.RateLimit{
-			Secret:               testJWTSecret,
-			TrustedProxyHops:     0,
-			LoginPerMinuteIP:     1000,
-			LoginPerHourAccount:  1000,
-			RegisterPerHourIP:    1000,
-			RefreshPerMinuteIP:   1000,
-			JournalPerMinute:     1000,
-			CompanionPerMinute:   1000,
-			InsightPerHour:       1000,
-			InsightPerDay:        1000,
-			AccountDeletePerHour: 1000,
+			Secret:                       testJWTSecret,
+			TrustedProxyHops:             0,
+			LoginPerMinuteIP:             1000,
+			LoginPerHourAccount:          1000,
+			RegisterPerHourIP:            1000,
+			RefreshPerMinuteIP:           1000,
+			JournalPerMinute:             1000,
+			CompanionPerMinute:           1000,
+			InsightPerHour:               1000,
+			InsightPerDay:                1000,
+			AccountDeletePerHour:         1000,
+			PasswordResetPerHourIP:       1000,
+			PasswordResetPerHourAccount:  1000,
+			EmailVerificationPerHourUser: 1000,
+			ExportPerHourUser:            1000,
 		},
 		AI: config.AI{
 			Provider:           "fake",
@@ -141,6 +147,15 @@ func testConfig() *config.Config {
 			EmbeddingModel:     "fake-embedding-768",
 			EmbeddingDimension: 768,
 			EmbeddingTimeout:   30 * time.Second,
+		},
+		Email: config.Email{
+			Provider:  "noop",
+			OutboxDir: "var/mail",
+		},
+		PrePublic: config.PrePublic{
+			RequireEmailVerification: false,
+			TermsVersion:             "2026-11-21",
+			PrivacyVersion:           "2026-11-21",
 		},
 		Log: config.Log{Level: "error", Format: "json"},
 	}

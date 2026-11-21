@@ -124,3 +124,19 @@ func HashRefreshToken(raw string) string {
 	sum := sha256.Sum256([]byte(raw))
 	return hex.EncodeToString(sum[:])
 }
+
+// NewActionToken returns a single-use verification/reset token and its hash.
+func NewActionToken() (raw string, hash string, err error) {
+	buffer := make([]byte, 32)
+	if _, err := rand.Read(buffer); err != nil {
+		return "", "", fmt.Errorf("generate action token: %w", err)
+	}
+	raw = base64.RawURLEncoding.EncodeToString(buffer)
+	return raw, HashActionToken(raw), nil
+}
+
+// HashActionToken hashes a verification/reset token for storage.
+func HashActionToken(raw string) string {
+	sum := sha256.Sum256([]byte(raw))
+	return hex.EncodeToString(sum[:])
+}

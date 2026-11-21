@@ -38,6 +38,15 @@ All notable backend changes are recorded here.
   - draft inclusion,
   - `sync.server_time`,
   - cross-user isolation and integration coverage.
+- Pre-public backend:
+  - email verification and resend,
+  - password reset with session revocation,
+  - session inventory and revoke-others,
+  - user data export,
+  - adult confirmation and legal acceptance,
+  - free/premium entitlement state,
+  - manual entitlement support commands,
+  - file/SMTP email delivery abstraction.
 
 ### Changed
 

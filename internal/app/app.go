@@ -22,10 +22,12 @@ import (
 	"github.com/ridwanafazn/sela-server/internal/modules/job"
 	"github.com/ridwanafazn/sela-server/internal/modules/journal"
 	"github.com/ridwanafazn/sela-server/internal/modules/memory"
+	"github.com/ridwanafazn/sela-server/internal/modules/prepublic"
 	"github.com/ridwanafazn/sela-server/internal/modules/user"
 	"github.com/ridwanafazn/sela-server/internal/platform/aiusage"
 	"github.com/ridwanafazn/sela-server/internal/platform/database"
 	"github.com/ridwanafazn/sela-server/internal/platform/httpx"
+	"github.com/ridwanafazn/sela-server/internal/platform/mailer"
 	"github.com/ridwanafazn/sela-server/internal/platform/ratelimit"
 	"github.com/ridwanafazn/sela-server/internal/platform/safety"
 	"github.com/ridwanafazn/sela-server/migrations"
@@ -72,20 +74,27 @@ func BuildRouter(cfg *config.Config, log *slog.Logger, db *database.DB) (*gin.En
 	tokens := auth.NewTokenManager(cfg.JWT.AccessSecret, cfg.JWT.Issuer, cfg.JWT.Audience, cfg.JWT.AccessTTL)
 	passwords := auth.NewPasswordHasher()
 	limiter := ratelimit.New(db.Gorm, cfg.RateLimit.Secret)
+	emailSender, err := mailer.New(cfg.Email)
+	if err != nil {
+		return nil, fmt.Errorf("configure email sender: %w", err)
+	}
 	authService := auth.NewService(
 		authRepo,
 		tokens,
 		passwords,
 		limiter,
 		auth.Limits{
-			LoginPerMinuteIP:    cfg.RateLimit.LoginPerMinuteIP,
-			LoginPerHourAccount: cfg.RateLimit.LoginPerHourAccount,
-			RegisterPerHourIP:   cfg.RateLimit.RegisterPerHourIP,
-			RefreshPerMinuteIP:  cfg.RateLimit.RefreshPerMinuteIP,
+			LoginPerMinuteIP:             cfg.RateLimit.LoginPerMinuteIP,
+			LoginPerHourAccount:          cfg.RateLimit.LoginPerHourAccount,
+			RegisterPerHourIP:            cfg.RateLimit.RegisterPerHourIP,
+			RefreshPerMinuteIP:           cfg.RateLimit.RefreshPerMinuteIP,
+			PasswordResetPerHourIP:       cfg.RateLimit.PasswordResetPerHourIP,
+			PasswordResetPerHourAccount:  cfg.RateLimit.PasswordResetPerHourAccount,
+			EmailVerificationPerHourUser: cfg.RateLimit.EmailVerificationPerHourUser,
 		},
 		cfg.JWT.RefreshTTL,
 		log,
-	)
+	).WithEmail(emailSender, cfg.PrePublic.RequireEmailVerification)
 	authHandler := auth.NewHandler(authService, cfg.RateLimit.TrustedProxyHops)
 	authMiddleware := auth.Authenticate(authService)
 
@@ -100,6 +109,15 @@ func BuildRouter(cfg *config.Config, log *slog.Logger, db *database.DB) (*gin.En
 
 	userService := user.NewService(user.NewRepository(db.Gorm))
 	userHandler := user.NewHandler(userService)
+	prepublicService := prepublic.NewService(
+		prepublic.NewRepository(db.Gorm),
+		limiter,
+		prepublic.Limits{ExportPerHour: cfg.RateLimit.ExportPerHourUser},
+		cfg.PrePublic.TermsVersion,
+		cfg.PrePublic.PrivacyVersion,
+		log,
+	)
+	prepublicHandler := prepublic.NewHandler(prepublicService)
 
 	queue := job.NewQueue(db.Gorm)
 	accountService := account.NewService(
@@ -175,13 +193,24 @@ func BuildRouter(cfg *config.Config, log *slog.Logger, db *database.DB) (*gin.En
 			authGroup.POST("/register", authHandler.Register)
 			authGroup.POST("/login", authHandler.Login)
 			authGroup.POST("/refresh", authHandler.Refresh)
+			authGroup.POST("/email-verification/confirm", authHandler.ConfirmEmailVerification)
+			authGroup.POST("/password-reset/request", authHandler.RequestPasswordReset)
+			authGroup.POST("/password-reset/confirm", authHandler.ConfirmPasswordReset)
 
 			protected := api.Group("")
 			protected.Use(authMiddleware)
 			protected.POST("/auth/logout", authHandler.Logout)
+			protected.POST("/auth/email-verification/resend", authHandler.RequestEmailVerification)
+			protected.GET("/auth/sessions", authHandler.Sessions)
+			protected.DELETE("/auth/sessions", authHandler.RevokeOtherSessions)
+			protected.DELETE("/auth/sessions/:sessionId", authHandler.RevokeSession)
 			protected.GET("/me", userHandler.GetMe)
 			protected.PATCH("/me", userHandler.UpdateMe)
 			protected.DELETE("/me", accountHandler.DeleteMe)
+			protected.GET("/me/consents", prepublicHandler.GetConsents)
+			protected.PUT("/me/consents", prepublicHandler.UpdateConsents)
+			protected.GET("/me/entitlements", prepublicHandler.GetEntitlement)
+			protected.GET("/me/export", prepublicHandler.Export)
 
 			protected.GET("/journals", journalHandler.List)
 			protected.POST("/journals", journalHandler.Create)

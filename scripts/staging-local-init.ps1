@@ -27,6 +27,9 @@ $overrides = @{
     EMBEDDING_DIMENSION             = "768"
     RATE_LIMIT_TRUSTED_PROXY_HOPS   = "0"
     LOG_FORMAT                      = "text"
+    EMAIL_PROVIDER                  = "file"
+    EMAIL_OUTBOX_DIR                = "/var/mail"
+    REQUIRE_EMAIL_VERIFICATION      = "false"
 }
 
 $lines = Get-Content $SourceEnv

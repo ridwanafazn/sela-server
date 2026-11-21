@@ -1,6 +1,6 @@
 # SELA Security and Privacy
 
-Version: 1.2
+Version: 1.3
 
 > Scope note (2026-11-21): sensitive memory requires explicit, recorded, and
 > revocable user consent. The default remains skip. See
@@ -54,6 +54,9 @@ Requirements:
 - Session revocation.
 - Login rate limiting.
 - Secure error messages that do not reveal account secrets.
+- Email verification and password-reset tokens are hashed at rest, single-use,
+  and time-limited.
+- Password reset revokes every active session.
 
 ## 4. Authorization
 
@@ -143,6 +146,8 @@ Users should be able to:
 - View and revoke sessions (current session in MVP; full session inventory and
   revoke-all are post-MVP).
 - Delete their account.
+- Export their data without credential material.
+- Inspect adult confirmation and legal acceptance state.
 
 The system must explain relevant consequences of deletion.
 

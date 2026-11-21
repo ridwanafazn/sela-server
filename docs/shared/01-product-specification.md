@@ -1,6 +1,6 @@
 # SELA Product Specification
 
-Version: 1.2
+Version: 1.3
 
 Status: MVP baseline with 2026-11-21 product vision decisions
 
@@ -411,3 +411,26 @@ The MVP is acceptable when:
 - The API is documented.
 - Automated tests cover critical flows.
 - The application can be deployed through the defined CI/CD process.
+
+## 13. Pre-public Backend Requirements
+
+These are required before public or paid launch and are implemented in the
+pre-public backend addendum:
+
+- Email verification and resend.
+- Password reset with all-session revocation.
+- Session inventory, single-session revoke, and revoke-others.
+- User data export without credential material.
+- Adult confirmation and versioned legal acceptance.
+- Provider-independent free/premium entitlement state.
+- Manual support commands for entitlement lookup, grant, and revoke.
+
+Still external:
+
+- Payment provider selection, checkout, signed webhooks, invoices, and refunds.
+- Premium limit enforcement.
+- Admin roles/API and support console.
+- Legal review of age and consent policy.
+- Privacy policy, terms, and deletion disclosure.
+- Crisis-resource review.
+- External penetration test.

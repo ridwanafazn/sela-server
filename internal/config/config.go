@@ -36,6 +36,8 @@ type Config struct {
 	RateLimit RateLimit
 	AI        AI
 	Safety    Safety
+	Email     Email
+	PrePublic PrePublic
 	Log       Log
 }
 
@@ -44,6 +46,24 @@ type App struct {
 	Env  string
 	Name string
 	Port int
+}
+
+// Email holds the outbound mail provider configuration.
+type Email struct {
+	Provider     string
+	OutboxDir    string
+	SMTPHost     string
+	SMTPPort     int
+	SMTPUsername string
+	SMTPPassword string
+	SMTPFrom     string
+}
+
+// PrePublic holds account gate and legal-version settings.
+type PrePublic struct {
+	RequireEmailVerification bool
+	TermsVersion             string
+	PrivacyVersion           string
 }
 
 // HTTP holds server timeouts and request limits.
@@ -85,17 +105,21 @@ type JWT struct {
 
 // RateLimit holds the DB-backed authentication limits.
 type RateLimit struct {
-	Secret               string
-	TrustedProxyHops     int
-	LoginPerMinuteIP     int
-	LoginPerHourAccount  int
-	RegisterPerHourIP    int
-	RefreshPerMinuteIP   int
-	JournalPerMinute     int
-	CompanionPerMinute   int
-	InsightPerHour       int
-	InsightPerDay        int
-	AccountDeletePerHour int
+	Secret                       string
+	TrustedProxyHops             int
+	LoginPerMinuteIP             int
+	LoginPerHourAccount          int
+	RegisterPerHourIP            int
+	RefreshPerMinuteIP           int
+	JournalPerMinute             int
+	CompanionPerMinute           int
+	InsightPerHour               int
+	InsightPerDay                int
+	AccountDeletePerHour         int
+	PasswordResetPerHourIP       int
+	PasswordResetPerHourAccount  int
+	EmailVerificationPerHourUser int
+	ExportPerHourUser            int
 }
 
 // AI holds provider, model, pricing, and budget settings. Fake providers are
@@ -180,7 +204,6 @@ func load(lookup func(string) (string, bool)) (*Config, error) {
 	if appPort < 1 || appPort > 65535 {
 		problems = append(problems, "APP_PORT must be between 1 and 65535")
 	}
-
 	logLevel := strings.ToLower(stringValue(lookup, "LOG_LEVEL", "info"))
 	if !isOneOf(logLevel, "debug", "info", "warn", "error") {
 		problems = append(problems, "LOG_LEVEL must be one of debug, info, warn, error")
@@ -268,31 +291,39 @@ func load(lookup func(string) (string, bool)) (*Config, error) {
 	}
 
 	rateLimitCfg := RateLimit{
-		Secret:               rateLimitSecret,
-		TrustedProxyHops:     intValue(lookup, "RATE_LIMIT_TRUSTED_PROXY_HOPS", 0, &problems),
-		LoginPerMinuteIP:     intValue(lookup, "RATE_LIMIT_LOGIN_PER_MINUTE_IP", 5, &problems),
-		LoginPerHourAccount:  intValue(lookup, "RATE_LIMIT_LOGIN_PER_HOUR_ACCOUNT", 10, &problems),
-		RegisterPerHourIP:    intValue(lookup, "RATE_LIMIT_REGISTER_PER_HOUR_IP", 3, &problems),
-		RefreshPerMinuteIP:   intValue(lookup, "RATE_LIMIT_REFRESH_PER_MINUTE_IP", 30, &problems),
-		JournalPerMinute:     intValue(lookup, "RATE_LIMIT_JOURNAL_PER_MINUTE", 60, &problems),
-		CompanionPerMinute:   intValue(lookup, "RATE_LIMIT_COMPANION_PER_MINUTE", 30, &problems),
-		InsightPerHour:       intValue(lookup, "RATE_LIMIT_INSIGHT_PER_HOUR", 5, &problems),
-		InsightPerDay:        intValue(lookup, "RATE_LIMIT_INSIGHT_PER_DAY", 20, &problems),
-		AccountDeletePerHour: intValue(lookup, "RATE_LIMIT_ACCOUNT_DELETE_PER_HOUR", 5, &problems),
+		Secret:                       rateLimitSecret,
+		TrustedProxyHops:             intValue(lookup, "RATE_LIMIT_TRUSTED_PROXY_HOPS", 0, &problems),
+		LoginPerMinuteIP:             intValue(lookup, "RATE_LIMIT_LOGIN_PER_MINUTE_IP", 5, &problems),
+		LoginPerHourAccount:          intValue(lookup, "RATE_LIMIT_LOGIN_PER_HOUR_ACCOUNT", 10, &problems),
+		RegisterPerHourIP:            intValue(lookup, "RATE_LIMIT_REGISTER_PER_HOUR_IP", 3, &problems),
+		RefreshPerMinuteIP:           intValue(lookup, "RATE_LIMIT_REFRESH_PER_MINUTE_IP", 30, &problems),
+		JournalPerMinute:             intValue(lookup, "RATE_LIMIT_JOURNAL_PER_MINUTE", 60, &problems),
+		CompanionPerMinute:           intValue(lookup, "RATE_LIMIT_COMPANION_PER_MINUTE", 30, &problems),
+		InsightPerHour:               intValue(lookup, "RATE_LIMIT_INSIGHT_PER_HOUR", 5, &problems),
+		InsightPerDay:                intValue(lookup, "RATE_LIMIT_INSIGHT_PER_DAY", 20, &problems),
+		AccountDeletePerHour:         intValue(lookup, "RATE_LIMIT_ACCOUNT_DELETE_PER_HOUR", 5, &problems),
+		PasswordResetPerHourIP:       intValue(lookup, "RATE_LIMIT_PASSWORD_RESET_PER_HOUR_IP", 5, &problems),
+		PasswordResetPerHourAccount:  intValue(lookup, "RATE_LIMIT_PASSWORD_RESET_PER_HOUR_ACCOUNT", 5, &problems),
+		EmailVerificationPerHourUser: intValue(lookup, "RATE_LIMIT_EMAIL_VERIFICATION_PER_HOUR_USER", 5, &problems),
+		ExportPerHourUser:            intValue(lookup, "RATE_LIMIT_EXPORT_PER_HOUR_USER", 3, &problems),
 	}
 	if rateLimitCfg.TrustedProxyHops < 0 || rateLimitCfg.TrustedProxyHops > 10 {
 		problems = append(problems, "RATE_LIMIT_TRUSTED_PROXY_HOPS must be between 0 and 10")
 	}
 	for key, value := range map[string]int{
-		"RATE_LIMIT_LOGIN_PER_MINUTE_IP":     rateLimitCfg.LoginPerMinuteIP,
-		"RATE_LIMIT_LOGIN_PER_HOUR_ACCOUNT":  rateLimitCfg.LoginPerHourAccount,
-		"RATE_LIMIT_REGISTER_PER_HOUR_IP":    rateLimitCfg.RegisterPerHourIP,
-		"RATE_LIMIT_REFRESH_PER_MINUTE_IP":   rateLimitCfg.RefreshPerMinuteIP,
-		"RATE_LIMIT_JOURNAL_PER_MINUTE":      rateLimitCfg.JournalPerMinute,
-		"RATE_LIMIT_COMPANION_PER_MINUTE":    rateLimitCfg.CompanionPerMinute,
-		"RATE_LIMIT_INSIGHT_PER_HOUR":        rateLimitCfg.InsightPerHour,
-		"RATE_LIMIT_INSIGHT_PER_DAY":         rateLimitCfg.InsightPerDay,
-		"RATE_LIMIT_ACCOUNT_DELETE_PER_HOUR": rateLimitCfg.AccountDeletePerHour,
+		"RATE_LIMIT_LOGIN_PER_MINUTE_IP":              rateLimitCfg.LoginPerMinuteIP,
+		"RATE_LIMIT_LOGIN_PER_HOUR_ACCOUNT":           rateLimitCfg.LoginPerHourAccount,
+		"RATE_LIMIT_REGISTER_PER_HOUR_IP":             rateLimitCfg.RegisterPerHourIP,
+		"RATE_LIMIT_REFRESH_PER_MINUTE_IP":            rateLimitCfg.RefreshPerMinuteIP,
+		"RATE_LIMIT_JOURNAL_PER_MINUTE":               rateLimitCfg.JournalPerMinute,
+		"RATE_LIMIT_COMPANION_PER_MINUTE":             rateLimitCfg.CompanionPerMinute,
+		"RATE_LIMIT_INSIGHT_PER_HOUR":                 rateLimitCfg.InsightPerHour,
+		"RATE_LIMIT_INSIGHT_PER_DAY":                  rateLimitCfg.InsightPerDay,
+		"RATE_LIMIT_ACCOUNT_DELETE_PER_HOUR":          rateLimitCfg.AccountDeletePerHour,
+		"RATE_LIMIT_PASSWORD_RESET_PER_HOUR_IP":       rateLimitCfg.PasswordResetPerHourIP,
+		"RATE_LIMIT_PASSWORD_RESET_PER_HOUR_ACCOUNT":  rateLimitCfg.PasswordResetPerHourAccount,
+		"RATE_LIMIT_EMAIL_VERIFICATION_PER_HOUR_USER": rateLimitCfg.EmailVerificationPerHourUser,
+		"RATE_LIMIT_EXPORT_PER_HOUR_USER":             rateLimitCfg.ExportPerHourUser,
 	} {
 		if value < 1 {
 			problems = append(problems, key+" must be at least 1")
@@ -324,6 +355,43 @@ func load(lookup func(string) (string, bool)) (*Config, error) {
 	}
 	safetyCfg := Safety{
 		ResourcesFile: strings.TrimSpace(stringValue(lookup, "SAFETY_RESOURCES_FILE", "")),
+	}
+	emailCfg := Email{
+		Provider:     strings.ToLower(stringValue(lookup, "EMAIL_PROVIDER", "noop")),
+		OutboxDir:    strings.TrimSpace(stringValue(lookup, "EMAIL_OUTBOX_DIR", "var/mail")),
+		SMTPHost:     strings.TrimSpace(stringValue(lookup, "SMTP_HOST", "")),
+		SMTPPort:     intValue(lookup, "SMTP_PORT", 587, &problems),
+		SMTPUsername: strings.TrimSpace(stringValue(lookup, "SMTP_USERNAME", "")),
+		SMTPPassword: strings.TrimSpace(stringValue(lookup, "SMTP_PASSWORD", "")),
+		SMTPFrom:     strings.TrimSpace(stringValue(lookup, "SMTP_FROM", "")),
+	}
+	if !isOneOf(emailCfg.Provider, "noop", "file", "smtp") {
+		problems = append(problems, "EMAIL_PROVIDER must be noop, file, or smtp")
+	}
+	if emailCfg.Provider == "file" && emailCfg.OutboxDir == "" {
+		problems = append(problems, "EMAIL_OUTBOX_DIR is required when EMAIL_PROVIDER=file")
+	}
+	if emailCfg.Provider == "smtp" {
+		if emailCfg.SMTPHost == "" {
+			problems = append(problems, "SMTP_HOST is required when EMAIL_PROVIDER=smtp")
+		}
+		if emailCfg.SMTPPort < 1 || emailCfg.SMTPPort > 65535 {
+			problems = append(problems, "SMTP_PORT must be between 1 and 65535")
+		}
+		if emailCfg.SMTPFrom == "" {
+			problems = append(problems, "SMTP_FROM is required when EMAIL_PROVIDER=smtp")
+		}
+	}
+	prePublicCfg := PrePublic{
+		RequireEmailVerification: boolValue(lookup, "REQUIRE_EMAIL_VERIFICATION", false, &problems),
+		TermsVersion:             stringValue(lookup, "TERMS_VERSION", "2026-11-21"),
+		PrivacyVersion:           stringValue(lookup, "PRIVACY_VERSION", "2026-11-21"),
+	}
+	if prePublicCfg.TermsVersion == "" {
+		problems = append(problems, "TERMS_VERSION must not be empty")
+	}
+	if prePublicCfg.PrivacyVersion == "" {
+		problems = append(problems, "PRIVACY_VERSION must not be empty")
 	}
 
 	if !isOneOf(aiCfg.Provider, "fake", "openai") {
@@ -408,6 +476,8 @@ func load(lookup func(string) (string, bool)) (*Config, error) {
 		RateLimit: rateLimitCfg,
 		AI:        aiCfg,
 		Safety:    safetyCfg,
+		Email:     emailCfg,
+		PrePublic: prePublicCfg,
 		Log: Log{
 			Level:  logLevel,
 			Format: logFormat,
@@ -447,6 +517,19 @@ func intValue(lookup func(string) (string, bool), key string, fallback int, prob
 		return fallback
 	}
 
+	return value
+}
+
+func boolValue(lookup func(string) (string, bool), key string, fallback bool, problems *[]string) bool {
+	raw, ok := lookup(key)
+	if !ok || strings.TrimSpace(raw) == "" {
+		return fallback
+	}
+	value, err := strconv.ParseBool(strings.TrimSpace(raw))
+	if err != nil {
+		*problems = append(*problems, key+" must be true or false")
+		return fallback
+	}
 	return value
 }
 

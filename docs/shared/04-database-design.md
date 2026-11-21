@@ -1,6 +1,6 @@
 # SELA Database Design
 
-Version: 1.4
+Version: 1.5
 
 Status: P0 schema decisions locked, with 2026-11-21 product vision decisions
 
@@ -75,6 +75,11 @@ Fields:
 - language.
 - timezone.
 - communication_style.
+- adult_confirmed_at, nullable.
+- terms_accepted_at, nullable.
+- terms_version, nullable.
+- privacy_accepted_at, nullable.
+- privacy_version, nullable.
 - created_at.
 - updated_at.
 
@@ -109,6 +114,48 @@ Rules:
 - Refresh tokens rotate on use.
 - Reuse of a rotated token revokes the entire token family.
 - `replaced_by` points to the replacement session for audit and reuse detection.
+
+### auth_tokens
+
+Stores single-use email verification and password reset tokens.
+
+Fields:
+
+- id.
+- user_id.
+- purpose: `email_verification` or `password_reset`.
+- token_hash.
+- expires_at.
+- used_at, nullable.
+- created_at.
+
+Rules:
+
+- Store only SHA-256 hashes of raw tokens.
+- Tokens are single-use.
+- Email verification tokens expire after 24 hours.
+- Password reset tokens expire after one hour.
+- Password reset revokes all active sessions.
+- Account deletion cascades through `user_id`.
+
+### user_entitlements
+
+Stores the provider-independent plan state.
+
+Fields:
+
+- user_id, primary key.
+- plan: `free` or `premium`.
+- status: `active`, `past_due`, or `canceled`.
+- current_period_end, nullable.
+- created_at.
+- updated_at.
+
+Rules:
+
+- Default is `free` and `active`.
+- Payment provider webhooks will update this table after provider selection.
+- Premium limit enforcement is not yet implemented.
 
 ### auth_rate_limits
 
