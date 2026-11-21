@@ -103,6 +103,22 @@ GCP status:
 - `SAFETY_RESOURCES_FILE` is still empty; crisis resources remain unreviewed.
 - GCP is intentionally deferred in favor of the verified local staging path.
 
+## Phase 3 offline backend — 2026-11-21
+
+Implemented:
+
+- `GET /journal-changes`.
+- `updated_at, id` cursor pagination.
+- Tombstones with `journal = null`.
+- Draft inclusion.
+- `sync.server_time`.
+- Ownership isolation.
+- Integration coverage for pagination, ordering, tombstones, drafts, and
+  cross-user isolation.
+
+Mobile offline L1 remains pending: encrypted local database, outbox, foreground
+sync, conflict-resolution UI, and local cleanup on logout/deletion.
+
 ## Pre-Beta position
 
 Workstreams from `docs/backend/11-focus-phase.md`:
@@ -117,7 +133,8 @@ Workstreams from `docs/backend/11-focus-phase.md`:
    profile preferences — not started.
 5. Beta hardening - local backend checks implemented; hosted monitoring and
    clinical review pending. See `docs/backend/16-beta-hardening.md`.
-6. Offline-first - deferred.
+6. Offline-first - backend `GET /journal-changes` implemented; mobile L1
+   deferred.
 
 The local staging path is verified and is the active path. The GCP runbook
 (`docs/backend/13-staging-runbook.md`) remains available if billing is enabled
@@ -351,7 +368,8 @@ Required local staging values:
 - Local staging is verified. GCP deployment is deferred; billing and the
   required GCP APIs are disabled.
 - `.env.staging` has `AI_API_KEY`; `VERTEX_PROJECT_ID` is set locally.
-- `GET /journal-changes` and offline-first sync are Phase 3.
+- `GET /journal-changes` is implemented. Mobile encrypted storage, outbox,
+  foreground sync, and conflict UI remain Phase 3 mobile work.
 - Local health gates, AI usage report, backup/restore verification, and incident
   runbook are implemented. Hosted dashboards/alerts are deferred with GCP.
 - Live model quality evaluation for tone, facts, and hallucination is manual.
@@ -376,6 +394,7 @@ Required local staging values:
 - `docs/backend/14-staging-validation.md`
 - `docs/backend/15-staging-without-gcp.md`
 - `docs/backend/16-beta-hardening.md`
+- `docs/backend/17-offline-sync.md`
 - `scripts/staging-preflight.ps1`
 - `docs/backend/09-safety-evaluation-cost.md`
 - `docs/shared/openapi.yaml`

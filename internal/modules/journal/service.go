@@ -219,6 +219,74 @@ func (s *Service) List(ctx context.Context, userID string, filter ListFilter) (*
 	return &Page{Items: items, NextCursor: nextCursor, HasMore: hasMore}, nil
 }
 
+// Changes returns a keyset-paginated stream of journal records, including
+// tombstones, for offline synchronization.
+func (s *Service) Changes(ctx context.Context, userID string, filter ChangeFilter) (*ChangePage, error) {
+	if filter.Limit < 1 {
+		filter.Limit = 20
+	}
+	if filter.Limit > 100 {
+		filter.Limit = 100
+	}
+
+	var (
+		afterUpdatedAt *time.Time
+		afterID        string
+	)
+	if filter.Cursor != "" {
+		updatedAt, id, err := decodeChangeCursor(filter.Cursor)
+		if err != nil {
+			return nil, apierrors.Validation("The request is invalid.", apierrors.Detail{
+				Field:   "cursor",
+				Code:    "INVALID",
+				Message: "The cursor is invalid.",
+			})
+		}
+		afterUpdatedAt = &updatedAt
+		afterID = id
+	}
+
+	journals, err := s.repo.Changes(ctx, userID, afterUpdatedAt, afterID, filter.Limit)
+	if err != nil {
+		return nil, err
+	}
+
+	hasMore := len(journals) > filter.Limit
+	if hasMore {
+		journals = journals[:filter.Limit]
+	}
+
+	items := make([]JournalChange, 0, len(journals))
+	for index := range journals {
+		entry := &journals[index]
+		change := JournalChange{
+			ID:        entry.ID,
+			Version:   entry.Version,
+			UpdatedAt: entry.UpdatedAt,
+			DeletedAt: entry.DeletedAt,
+		}
+		if entry.DeletedAt == nil {
+			view := newView(entry)
+			change.Journal = &view
+		}
+		items = append(items, change)
+	}
+
+	var nextCursor *string
+	if hasMore && len(journals) > 0 {
+		last := journals[len(journals)-1]
+		cursor := encodeChangeCursor(last.UpdatedAt, last.ID)
+		nextCursor = &cursor
+	}
+
+	return &ChangePage{
+		Items:      items,
+		NextCursor: nextCursor,
+		HasMore:    hasMore,
+		ServerTime: s.now().UTC(),
+	}, nil
+}
+
 // Get returns one owned journal.
 func (s *Service) Get(ctx context.Context, userID, journalID string) (*View, error) {
 	entry, err := s.repo.Get(ctx, userID, journalID)

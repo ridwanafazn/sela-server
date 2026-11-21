@@ -28,6 +28,7 @@ Backend Phase 2 is complete and frozen at `v0.2.0`.
 - Staging validation: `docs/backend/14-staging-validation.md`.
 - Staging without GCP: `docs/backend/15-staging-without-gcp.md`.
 - Beta hardening: `docs/backend/16-beta-hardening.md`.
+- Offline sync backend: `docs/backend/17-offline-sync.md`.
 - Freeze checklist and next inputs: `docs/backend/10-phase-2-freeze.md`.
 - Active focus phase: `docs/backend/11-focus-phase.md`.
 

@@ -71,7 +71,8 @@ Test:
 - Idempotency replay and key-reuse conflict.
 - Missing `If-Match` returns 428.
 - Stale journal version returns 409.
-- Journal change feed returns tombstones.
+- Journal change feed returns tombstones, drafts, cursor pages, and
+  `sync.server_time`.
 - Asynchronous insight acceptance and job status.
 - Scheduled insight enable, update, read, and disable.
 - Scheduled insight schedule changes do not create duplicate jobs.

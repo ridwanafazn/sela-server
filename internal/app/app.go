@@ -185,6 +185,7 @@ func BuildRouter(cfg *config.Config, log *slog.Logger, db *database.DB) (*gin.En
 
 			protected.GET("/journals", journalHandler.List)
 			protected.POST("/journals", journalHandler.Create)
+			protected.GET("/journal-changes", journalHandler.Changes)
 			protected.GET("/journals/:journalId", journalHandler.Get)
 			protected.PATCH("/journals/:journalId", journalHandler.Update)
 			protected.DELETE("/journals/:journalId", journalHandler.Delete)

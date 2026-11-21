@@ -156,6 +156,36 @@ func (r *Repository) List(ctx context.Context, userID string, filter ListFilter,
 	return journals, nil
 }
 
+// Changes returns up to limit+1 journal records, including tombstones, in
+// updated_at/id order for offline synchronization.
+func (r *Repository) Changes(
+	ctx context.Context,
+	userID string,
+	afterUpdatedAt *time.Time,
+	afterID string,
+	limit int,
+) ([]Journal, error) {
+	query := `SELECT id, user_id, title, content, entry_date, status, version,
+	                 created_at, updated_at, deleted_at
+	          FROM journals
+	          WHERE user_id = ?`
+	args := []any{userID}
+
+	if afterUpdatedAt != nil {
+		query += ` AND (updated_at, id) > (?::timestamptz, ?::uuid)`
+		args = append(args, *afterUpdatedAt, afterID)
+	}
+
+	query += ` ORDER BY updated_at ASC, id ASC LIMIT ?`
+	args = append(args, limit+1)
+
+	var journals []Journal
+	if err := r.db.WithContext(ctx).Raw(query, args...).Scan(&journals).Error; err != nil {
+		return nil, fmt.Errorf("list journal changes: %w", err)
+	}
+	return journals, nil
+}
+
 // ActiveForBackfill returns active journals after the given ID for derived-work
 // regeneration. Content stays in memory only long enough to compute its hash.
 func (r *Repository) ActiveForBackfill(ctx context.Context, afterID string, limit int) ([]BackfillTarget, error) {

@@ -88,6 +88,48 @@ func (h *Handler) List(c *gin.Context) {
 	})
 }
 
+// Changes handles GET /journal-changes.
+func (h *Handler) Changes(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
+
+	principal, ok := authn.From(c.Request.Context())
+	if !ok {
+		response.Error(c, apierrors.Unauthenticated("Authentication is required."))
+		return
+	}
+
+	filter, apiErr := parseChangeQuery(c)
+	if apiErr != nil {
+		response.Error(c, apiErr)
+		return
+	}
+
+	page, err := h.service.Changes(c.Request.Context(), principal.UserID, filter)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, changeListResponse{
+		Data: page.Items,
+		Pagination: response.Pagination{
+			NextCursor: page.NextCursor,
+			HasMore:    page.HasMore,
+		},
+		Sync: changeSync{ServerTime: page.ServerTime},
+	})
+}
+
+type changeSync struct {
+	ServerTime time.Time `json:"server_time"`
+}
+
+type changeListResponse struct {
+	Data       []JournalChange     `json:"data"`
+	Pagination response.Pagination `json:"pagination"`
+	Sync       changeSync          `json:"sync"`
+}
+
 // Get handles GET /journals/{journalId}.
 func (h *Handler) Get(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
@@ -224,6 +266,31 @@ func requireIfMatch(c *gin.Context) (int, bool) {
 	}
 
 	return version, true
+}
+
+func parseChangeQuery(c *gin.Context) (ChangeFilter, *apierrors.Error) {
+	filter := ChangeFilter{Limit: 20}
+	var details []apierrors.Detail
+
+	if raw := strings.TrimSpace(c.Query("limit")); raw != "" {
+		limit, err := strconv.Atoi(raw)
+		if err != nil || limit < 1 || limit > 100 {
+			details = append(details, apierrors.Detail{
+				Field:   "limit",
+				Code:    "INVALID_VALUE",
+				Message: "Limit must be an integer between 1 and 100.",
+			})
+		} else {
+			filter.Limit = limit
+		}
+	}
+
+	filter.Cursor = strings.TrimSpace(c.Query("cursor"))
+
+	if len(details) > 0 {
+		return filter, apierrors.Validation("The request is invalid.", details...)
+	}
+	return filter, nil
 }
 
 func parseListQuery(c *gin.Context) (ListFilter, *apierrors.Error) {

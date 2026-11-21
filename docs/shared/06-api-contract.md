@@ -350,7 +350,7 @@ Contract requirements:
 - A missing `If-Match` returns `428 PRECONDITION_REQUIRED`.
 - A stale version returns `409 VERSION_CONFLICT`.
 - `POST /journals` requires `Idempotency-Key` so an offline create can be retried safely.
-- `GET /journal-changes` returns journal changes ordered by `updated_at` and `id`, including tombstones.
+- `GET /journal-changes` returns journal changes ordered by `updated_at` and `id`, including tombstones. The backend implements this endpoint; see `docs/backend/17-offline-sync.md`.
 - A deleted change has `deleted_at` set and `journal` set to `null`.
 - The change cursor is opaque.
 - The client MUST NOT silently overwrite a newer server version. It must preserve the local content as a conflict copy or ask the user to resolve it.

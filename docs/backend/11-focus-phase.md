@@ -220,13 +220,25 @@ Remaining:
 
 ### 5. Offline-first journaling
 
-Status: deferred until the online MVP is stable.
+Status: backend endpoint implemented. Mobile offline L1 remains deferred until
+the online MVP is stable. See `docs/backend/17-offline-sync.md`.
 
-Tasks:
+Completed:
 
-- Implement `GET /journal-changes`.
+- `GET /journal-changes`.
+- `updated_at, id` cursor pagination.
+- Tombstones for deleted journals.
+- Draft inclusion.
+- Ownership isolation.
+- Conflict rules documented and covered by existing `If-Match` behavior.
+- Integration coverage for pagination, ordering, tombstones, drafts, and
+  cross-user isolation.
+
+Remaining mobile work:
+
 - Encrypted local journal database.
 - Outbox and retry.
+- Sync on foreground/resume.
 - Conflict detection and resolution UI.
 - Cleanup on logout and account deletion.
 

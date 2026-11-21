@@ -88,6 +88,30 @@ type Page struct {
 	HasMore    bool
 }
 
+// ChangeFilter is a validated journal-changes query.
+type ChangeFilter struct {
+	Cursor string
+	Limit  int
+}
+
+// JournalChange is one current journal record for offline synchronization.
+// Deleted records are tombstones with a nil journal.
+type JournalChange struct {
+	ID        string     `json:"id"`
+	Version   int        `json:"version"`
+	UpdatedAt time.Time  `json:"updated_at"`
+	DeletedAt *time.Time `json:"deleted_at"`
+	Journal   *View      `json:"journal"`
+}
+
+// ChangePage is a page of journal changes and the server sync time.
+type ChangePage struct {
+	Items      []JournalChange
+	NextCursor *string
+	HasMore    bool
+	ServerTime time.Time
+}
+
 // IdempotencyRecord is a stored replayable response.
 type IdempotencyRecord struct {
 	ID             string    `gorm:"column:id;primaryKey;type:uuid"`

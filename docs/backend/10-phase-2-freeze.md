@@ -62,9 +62,9 @@ the frozen artifact. Execution is tracked in
 
 ## Deferred to Phase 3
 
-- `GET /journal-changes` and offline synchronization.
 - Encrypted local mobile journal storage.
-- Conflict-resolution UI.
+- Mobile outbox, retry, and conflict-resolution UI.
+- Automatic background sync.
 - Metrics dashboards, alerts, backup/restore verification, and incident runbook.
 - Live model quality evaluation for tone, factual accuracy, and hallucination
   rate.

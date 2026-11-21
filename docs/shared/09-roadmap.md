@@ -194,6 +194,8 @@ Mobile quality:
 
 Offline journaling:
 
+- Backend: `GET /journal-changes` with tombstones and cursor pagination
+  (implemented).
 - Encrypted local journal database.
 - Journal outbox.
 - Sync on foreground and resume.

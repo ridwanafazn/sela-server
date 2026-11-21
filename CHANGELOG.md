@@ -31,6 +31,13 @@ All notable backend changes are recorded here.
   - `cmd/ops stale-memories` review count,
   - PostgreSQL 17 backup and restore verification,
   - incident runbook and security checklist.
+- Offline sync backend:
+  - `GET /journal-changes`,
+  - `updated_at, id` cursor pagination,
+  - tombstones,
+  - draft inclusion,
+  - `sync.server_time`,
+  - cross-user isolation and integration coverage.
 
 ### Changed
 

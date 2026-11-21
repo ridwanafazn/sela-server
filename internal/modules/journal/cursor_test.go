@@ -24,6 +24,39 @@ func TestCursorRoundTrip(t *testing.T) {
 	}
 }
 
+func TestChangeCursorRoundTrip(t *testing.T) {
+	updatedAt := time.Date(2026, 11, 21, 10, 11, 12, 123456000, time.UTC)
+	id := uuid.NewString()
+
+	decodedTime, decodedID, err := decodeChangeCursor(encodeChangeCursor(updatedAt, id))
+	if err != nil {
+		t.Fatalf("decodeChangeCursor returned error: %v", err)
+	}
+	if !decodedTime.Equal(updatedAt) {
+		t.Errorf("updated_at = %s, want %s", decodedTime, updatedAt)
+	}
+	if decodedID != id {
+		t.Errorf("id = %s, want %s", decodedID, id)
+	}
+}
+
+func TestChangeCursorRejectsInvalidValues(t *testing.T) {
+	validID := uuid.NewString()
+	tests := []string{
+		"",
+		"not-base64",
+		base64.RawURLEncoding.EncodeToString([]byte("not json")),
+		base64.RawURLEncoding.EncodeToString([]byte(`{"t":"not-a-time","i":"` + validID + `"}`)),
+		base64.RawURLEncoding.EncodeToString([]byte(`{"t":"2026-11-21T10:11:12Z","i":"not-a-uuid"}`)),
+		base64.RawURLEncoding.EncodeToString([]byte(`{}`)),
+	}
+	for _, raw := range tests {
+		if _, _, err := decodeChangeCursor(raw); err == nil {
+			t.Errorf("decodeChangeCursor accepted invalid cursor %q", raw)
+		}
+	}
+}
+
 func TestCursorRejectsInvalidValues(t *testing.T) {
 	validID := uuid.NewString()
 
