@@ -11,6 +11,26 @@
 Phase 2 backend is complete and frozen. The mobile application and staging
 deployment are separate deliverables and are not included in this release.
 
+## Post-freeze scope addendum — 2026-11-21
+
+A product vision reconciliation changed the MVP scope after this freeze:
+
+- Weekly and monthly scheduled insights are promoted to MVP.
+- Per-entry journal analysis remains a core capability with post-MVP delivery.
+- Sensitive memory storage requires explicit, revocable user consent; the
+  default remains skip.
+- Companion and insight prompt v2 are active.
+
+The B1 backend addendum is implemented at migration `17` and OpenAPI `1.4.0`:
+schedule API, timezone-aware fan-out, consent API, sensitive retrieval
+enforcement, and active prompt v2. The staging scheduler trigger and mobile
+controls remain pending.
+
+The `v0.2.0` release remains a historical record. The addendum is not part of
+the frozen artifact. Execution is tracked in
+`docs/backend/11-focus-phase.md` and the decisions are recorded in
+`docs/shared/10-product-vision-decisions.md`.
+
 ## Exit criteria
 
 | Criterion | Status |
@@ -50,6 +70,9 @@ deployment are separate deliverables and are not included in this release.
   rate.
 - Locale clinical review of crisis resources.
 - Staging and production deployment.
+
+Per-entry journal analysis is a core capability with post-MVP delivery and is
+not part of Phase 3. Scheduled insights are an MVP addendum, not deferred.
 
 ## Required inputs for the next focus
 

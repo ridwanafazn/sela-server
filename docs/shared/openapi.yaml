@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: SELA API
-  version: 1.3.0
+  version: 1.4.0
   description: |
     REST API for SELA, a personal AI journaling and companion platform.
 
@@ -11,9 +11,9 @@ info:
 
     This document is the single machine-readable API contract for the MVP.
     It reflects the P0 decisions: OpenAPI as the canonical contract,
-    asynchronous insight generation, server-side journal drafts, rotating
-    refresh tokens, asynchronous account deletion, and explicit evidence
-    for insights.
+    asynchronous insight generation, scheduled weekly/monthly insights,
+    sensitive memory consent, server-side journal drafts, rotating refresh
+    tokens, asynchronous account deletion, and explicit evidence for insights.
   license:
     name: Proprietary
     identifier: LicenseRef-Proprietary
@@ -205,10 +205,6 @@ paths:
                 $ref: "#/components/schemas/MeResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
-        "413":
-          $ref: "#/components/responses/PayloadTooLarge"
-        "415":
-          $ref: "#/components/responses/UnsupportedMediaType"
         "413":
           $ref: "#/components/responses/PayloadTooLarge"
         "415":
@@ -693,6 +689,46 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /memory-consent:
+    get:
+      tags: [Memories]
+      operationId: getMemoryConsent
+      summary: Get sensitive memory consent
+      responses:
+        "200":
+          description: Consent state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemoryConsentResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    put:
+      tags: [Memories]
+      operationId: updateMemoryConsent
+      summary: Grant or revoke sensitive memory consent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateMemoryConsentRequest"
+      responses:
+        "200":
+          description: Consent updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemoryConsentResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
   /insights:
     get:
       tags: [Insights]
@@ -777,6 +813,59 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
+
+  /insight-schedule:
+    get:
+      tags: [Insights]
+      operationId: getInsightSchedule
+      summary: Get the weekly or monthly insight schedule
+      responses:
+        "200":
+          description: Schedule state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InsightScheduleResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    put:
+      tags: [Insights]
+      operationId: updateInsightSchedule
+      summary: Enable, update, or disable the insight schedule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateInsightScheduleRequest"
+      responses:
+        "200":
+          description: Schedule updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InsightScheduleResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    delete:
+      tags: [Insights]
+      operationId: disableInsightSchedule
+      summary: Disable the insight schedule
+      responses:
+        "200":
+          description: Schedule disabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InsightScheduleResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
 
   /insights/{insightId}:
     parameters:
@@ -1444,7 +1533,7 @@ components:
 
     Memory:
       type: object
-      required: [id, content, status, confidence, source_count, created_at, updated_at]
+      required: [id, content, sensitivity, status, confidence, source_count, created_at, updated_at]
       properties:
         id:
           type: string
@@ -1453,6 +1542,9 @@ components:
           type: string
         category:
           type: [string, "null"]
+        sensitivity:
+          type: string
+          enum: [normal, sensitive]
         status:
           $ref: "#/components/schemas/MemoryStatus"
         confidence:
@@ -1775,7 +1867,7 @@ components:
 
     InsightJobOutcome:
       type: string
-      enum: [insight_created, insufficient_evidence]
+      enum: [insight_created, insufficient_evidence, budget_exhausted]
 
     InsightJobError:
       type: object
@@ -1875,3 +1967,90 @@ components:
             type: string
             minLength: 1
         required: [note]
+
+    InsightScheduleCadence:
+      type: string
+      enum: [weekly, monthly]
+
+    InsightSchedule:
+      type: object
+      required:
+        - enabled
+        - cadence
+        - timezone
+        - budget_blocked
+        - next_run_at
+        - last_run_at
+        - updated_at
+      properties:
+        enabled:
+          type: boolean
+        cadence:
+          oneOf:
+            - $ref: "#/components/schemas/InsightScheduleCadence"
+            - type: "null"
+        timezone:
+          type: string
+        next_run_at:
+          type: [string, "null"]
+          format: date-time
+        last_run_at:
+          type: [string, "null"]
+          format: date-time
+        budget_blocked:
+          type: boolean
+        updated_at:
+          type: [string, "null"]
+          format: date-time
+
+    InsightScheduleResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/InsightSchedule"
+
+    UpdateInsightScheduleRequest:
+      type: object
+      required: [enabled]
+      properties:
+        enabled:
+          type: boolean
+        cadence:
+          oneOf:
+            - $ref: "#/components/schemas/InsightScheduleCadence"
+            - type: "null"
+          description: Required when enabled is true.
+
+    MemoryConsent:
+      type: object
+      required: [scope, granted, granted_at, revoked_at, updated_at]
+      properties:
+        scope:
+          type: string
+          enum: [sensitive_memory]
+        granted:
+          type: boolean
+        granted_at:
+          type: [string, "null"]
+          format: date-time
+        revoked_at:
+          type: [string, "null"]
+          format: date-time
+        updated_at:
+          type: [string, "null"]
+          format: date-time
+
+    MemoryConsentResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/MemoryConsent"
+
+    UpdateMemoryConsentRequest:
+      type: object
+      required: [granted]
+      properties:
+        granted:
+          type: boolean

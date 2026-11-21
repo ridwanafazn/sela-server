@@ -1,7 +1,14 @@
 # SELA API Contract
 
-Version: 1.2  
-Status: P0 decisions locked
+Version: 1.4
+
+Status: P0 decisions locked, with 2026-11-21 product vision decisions
+
+> Scope note: scheduled insight preferences and sensitive memory consent are
+> part of the MVP contract. Per-entry journal analysis is post-MVP and is not an
+> MVP endpoint. Insight feedback remains `confirm`, `correct`, or `reject`;
+> "explore further" is a Companion flow, not a fourth feedback action. See
+> `10-product-vision-decisions.md`.
 
 ## 1. Purpose
 
@@ -189,6 +196,10 @@ Idempotency-Key: <uuid>
 
 The OpenAPI contract marks which operations require the header.
 
+Scheduled insight generation is also retry-sensitive. Schedule creation and
+schedule changes MUST be idempotent and MUST NOT create duplicate jobs or
+insights.
+
 Rules:
 
 - The key is scoped to the authenticated user and operation.
@@ -267,6 +278,53 @@ Polling guidance:
 - Do not create a second job to replace a slow job.
 
 When evidence is insufficient, the system MUST NOT fabricate an insight.
+
+### Scheduled Insights
+
+Weekly and monthly scheduled insights are MVP.
+
+The contract exposes:
+
+- `GET /insight-schedule` to read the current schedule.
+- `PUT /insight-schedule` to enable or update a weekly or monthly schedule.
+- `DELETE /insight-schedule` to disable the schedule.
+- A `budget_blocked` field in the schedule response.
+
+Rules:
+
+- The schedule is timezone-aware and uses the profile timezone.
+- Scheduled generation uses the same evidence threshold and job status model as
+  on-demand generation.
+- Enabling a schedule requires explicit user action.
+- A schedule change MUST NOT create duplicate jobs or insights.
+- In-app delivery is required. Push notification delivery is a separate
+  decision.
+- Per-entry journal analysis is not part of the MVP contract.
+
+### Insight Feedback
+
+Insight feedback actions remain:
+
+- `confirm`
+- `correct`
+- `reject`
+
+"Explore further" is a client action that starts a Companion conversation with
+the insight context. It is not a fourth feedback action in the API.
+
+### Sensitive Memory Consent
+
+Sensitive memory extraction and retrieval require explicit, revocable consent.
+
+The contract exposes:
+
+- `GET /memory-consent` to read the current consent state.
+- `PUT /memory-consent` with `{"granted": true}` or `{"granted": false}` to
+  grant or revoke consent.
+
+Memory responses include `sensitivity` with `normal` or `sensitive`. Sensitive
+memories are excluded from Companion and Insight retrieval when consent is
+absent, expired, or revoked.
 
 ## 12. Health
 

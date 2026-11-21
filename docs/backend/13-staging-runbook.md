@@ -1,14 +1,21 @@
 # Staging Runbook — sela-513807
 
-Status: prepared locally. Nothing in this runbook has been executed against
-Google Cloud yet; it requires an active billing account.
+Status: Neon staging is migrated to schema `17` and passed a local API/worker
+smoke test. Google Cloud deployment has not been executed because billing is
+disabled. See `docs/backend/14-staging-validation.md`.
+
+A non-GCP local staging path is documented in
+`docs/backend/15-staging-without-gcp.md` while the GCP billing blocker is
+resolved.
 
 Decisions:
 
 - Cloud Run region: `asia-southeast1` (Singapore), co-located with Neon and Vertex.
 - Neon project: `raspy-river-82693559`, database `sela`, PostgreSQL 17, pgvector 0.8.7.
-- Worker: manual Cloud Run Job. No Cloud Scheduler, because a 24/7 poll would
-  exhaust Neon Free CU-hours.
+- Worker: manual Cloud Run Job for async work.
+- Scheduler: a low-frequency Cloud Scheduler trigger runs `sela-worker
+  -schedules` for weekly/monthly insights. Verify Neon Free CU-hours before
+  enabling an always-on worker.
 - Image: `asia-southeast1-docker.pkg.dev/sela-513807/sela/sela-server:v0.2.1`.
 
 ## Fixed values
@@ -237,7 +244,13 @@ Record the service URL. Cloud Run provides HTTPS.
 
 ## 8. Deploy the worker job
 
-No scheduler. Execute it after creating a journal during smoke tests.
+The schedule preference API and fan-out are implemented. The staging Cloud
+Scheduler trigger is not configured yet. For the current staging pass, execute
+the worker on demand after each async step and run `sela-worker -schedules` to
+test due schedules.
+
+Do not mark automatic scheduled insights as verified until the Cloud Scheduler
+trigger is configured.
 
 ```powershell
 gcloud run jobs deploy sela-worker `
@@ -255,6 +268,26 @@ Run it on demand:
 gcloud run jobs execute sela-worker --region=asia-southeast1 --project=sela-513807 --wait
 ```
 
+## 8A. Create the insight scheduler trigger
+
+After billing and the APIs are active:
+
+1. Deploy a second Cloud Run Job named `sela-scheduler` from the same image:
+   - command: `/usr/local/bin/sela-worker`
+   - args: `-schedules`
+   - max retries: `0`
+   - task timeout: `300`
+2. Create a Cloud Scheduler HTTP target that invokes the Cloud Run Jobs API
+   `run` method for `sela-scheduler` with an OAuth service account.
+3. Use a low frequency, such as every 5–15 minutes. Verify the Neon Free
+   CU-hour impact before enabling it permanently.
+4. Verify by setting a test user's `next_run_at` in the past and confirming that
+   one `insight.generate` job is created with `generation_type=weekly` or
+   `monthly`, and that a second scheduler tick does not duplicate it.
+
+The exact HTTP target URI depends on the Cloud Run Jobs API version and region;
+verify it in the Console before creating the Scheduler job.
+
 ## 9. Smoke test
 
 ```powershell
@@ -265,6 +298,10 @@ $api = (gcloud run services describe sela-api --region=asia-southeast1 --project
 The script creates a synthetic user, three journals, a conversation, an
 insight request, runs the worker after each async step, and deletes the
 account. It fails if any step returns an unexpected status.
+
+The current script covers on-demand insights. Extend it to cover schedule
+enable/disable, `sela-worker -schedules`, and sensitive memory consent
+grant/revoke.
 
 Then verify:
 
@@ -300,6 +337,13 @@ entering real journal data.
 - Migrations are forward-only; do not roll back unless the previous image is
   compatible with the older schema.
 - Keep the previous image tag in Artifact Registry.
+
+## Not yet verifiable in this staging pass
+
+- Cloud Scheduler trigger for `sela-worker -schedules`.
+- Live model quality evaluation for prompt v2.
+- Mobile memory review, insight review, schedule controls, consent UI, and
+  editable profile preferences.
 
 ## Out of scope for staging
 

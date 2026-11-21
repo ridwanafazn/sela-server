@@ -82,6 +82,7 @@ type extractionSource struct {
 type validatedCandidate struct {
 	Content       string
 	Category      *string
+	Sensitivity   string
 	Confidence    float64
 	ConflictsWith []string
 }
@@ -93,8 +94,10 @@ type ExtractionRepository interface {
 	EligibleJournalIDs(ctx context.Context, userID string, journalIDs []string) (map[string]bool, error)
 	EligibleMessageIDs(ctx context.Context, userID string, messageIDs []string) (map[string]bool, error)
 	OwnedMemoryIDs(ctx context.Context, userID string, memoryIDs []string) (map[string]bool, error)
+	HasSensitiveMemoryConsent(ctx context.Context, userID string) (bool, error)
 	FindByNormalizedContent(ctx context.Context, userID, content string) (*Memory, error)
 	AddSource(ctx context.Context, memoryID string, source SourceRef, now time.Time) error
+	MarkSensitive(ctx context.Context, memoryID string, now time.Time) error
 	AddConflicts(ctx context.Context, memoryID string, conflicts []string, now time.Time) error
 	Create(ctx context.Context, memory *Memory, source SourceRef, conflicts []string) error
 }
@@ -270,13 +273,18 @@ func (s *ExtractionService) process(ctx context.Context, source *extractionSourc
 		parsed = parsed[:maxCandidatesPerSource]
 	}
 
+	sensitiveConsent, err := s.repo.HasSensitiveMemoryConsent(ctx, source.UserID)
+	if err != nil {
+		return err
+	}
+
 	now := s.now().UTC()
 	seen := make(map[string]bool, len(parsed))
 	valid := make([]validatedCandidate, 0, len(parsed))
 
-	var sensitiveSkipped, invalidSkipped int
+	var sensitiveSkipped, sensitiveStored, invalidSkipped int
 	for _, raw := range parsed {
-		candidate, accepted, sensitive, err := s.validateCandidate(ctx, source, raw)
+		candidate, accepted, sensitive, err := s.validateCandidate(ctx, source, raw, sensitiveConsent)
 		if err != nil {
 			return err
 		}
@@ -287,6 +295,9 @@ func (s *ExtractionService) process(ctx context.Context, source *extractionSourc
 		if !accepted {
 			invalidSkipped++
 			continue
+		}
+		if candidate.Sensitivity == SensitivitySensitive {
+			sensitiveStored++
 		}
 
 		key := normalizedContent(candidate.Content)
@@ -316,6 +327,11 @@ func (s *ExtractionService) process(ctx context.Context, source *extractionSourc
 			if err := s.repo.AddSource(ctx, existing.ID, sourceRef, now); err != nil {
 				return err
 			}
+			if candidate.Sensitivity == SensitivitySensitive {
+				if err := s.repo.MarkSensitive(ctx, existing.ID, now); err != nil {
+					return err
+				}
+			}
 			if err := s.repo.AddConflicts(ctx, existing.ID, candidate.ConflictsWith, now); err != nil {
 				return err
 			}
@@ -332,6 +348,7 @@ func (s *ExtractionService) process(ctx context.Context, source *extractionSourc
 			UserID:      source.UserID,
 			Content:     candidate.Content,
 			Category:    candidate.Category,
+			Sensitivity: candidate.Sensitivity,
 			Status:      StatusCandidate,
 			Confidence:  &candidate.Confidence,
 			SourceCount: 1,
@@ -356,6 +373,7 @@ func (s *ExtractionService) process(ctx context.Context, source *extractionSourc
 		slog.Int("merged", merged),
 		slog.Int("skipped", skipped+invalidSkipped),
 		slog.Int("sensitive_skipped", sensitiveSkipped),
+		slog.Int("sensitive_stored", sensitiveStored),
 	)
 
 	return nil
@@ -365,11 +383,17 @@ func (s *ExtractionService) validateCandidate(
 	ctx context.Context,
 	source *extractionSource,
 	raw extractedMemory,
+	sensitiveConsent bool,
 ) (*validatedCandidate, bool, bool, error) {
-	if raw.Sensitivity == "sensitive" {
-		return nil, false, true, nil
-	}
-	if raw.Sensitivity != "normal" {
+	sensitivity := SensitivityNormal
+	switch raw.Sensitivity {
+	case SensitivitySensitive:
+		if !sensitiveConsent {
+			return nil, false, true, nil
+		}
+		sensitivity = SensitivitySensitive
+	case SensitivityNormal:
+	default:
 		return nil, false, false, nil
 	}
 	if raw.CertaintyType != "explicit" && raw.CertaintyType != "inferred" {
@@ -428,6 +452,7 @@ func (s *ExtractionService) validateCandidate(
 	return &validatedCandidate{
 		Content:       content,
 		Category:      normalizeCategory(raw.Category),
+		Sensitivity:   sensitivity,
 		Confidence:    confidence,
 		ConflictsWith: canonicalConflicts,
 	}, true, false, nil

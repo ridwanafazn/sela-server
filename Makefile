@@ -6,7 +6,7 @@ IMAGE   ?= sela-server:local
 
 .PHONY: help tidy fmt fmt-check vet test test-race test-integration build run \
 	migrate-up migrate-down migrate-down-all migrate-version \
-	compose-up compose-down compose-reset check docker-build worker worker-once backfill eval
+	compose-up compose-down compose-reset check docker-build worker worker-once scheduler backfill schedules ops-health ops-usage eval
 
 help:
 	@echo "SELA backend"
@@ -22,6 +22,10 @@ help:
 	@echo "  make run                 Run the API locally"
 	@echo "  make worker              Run the background worker"
 	@echo "  make worker-once         Process available jobs once and exit"
+	@echo "  make scheduler           Run the periodic insight fan-out"
+	@echo "  make schedules           Enqueue due weekly/monthly insight jobs and exit"
+	@echo "  make ops-health          Run local beta health gates"
+	@echo "  make ops-usage           Show AI usage and cost summary"
 	@echo "  make backfill            Re-enqueue embeddings and memory extraction for active journals"
 	@echo "  make eval                Run deterministic safety and prompt-injection quality gates"
 	@echo "  make migrate-up          Apply all migrations"
@@ -63,6 +67,8 @@ build:
 	$(GO) build -trimpath -ldflags "-X main.version=$(VERSION)" -o bin/sela-api ./cmd/api
 	$(GO) build -trimpath -o bin/sela-migrate ./cmd/migrate
 	$(GO) build -trimpath -o bin/sela-worker ./cmd/worker
+	$(GO) build -trimpath -o bin/sela-scheduler ./cmd/scheduler
+	$(GO) build -trimpath -o bin/sela-ops ./cmd/ops
 
 run:
 	$(GO) run ./cmd/api
@@ -72,6 +78,18 @@ worker:
 
 worker-once:
 	$(GO) run ./cmd/worker -once
+
+scheduler:
+	$(GO) run ./cmd/scheduler
+
+schedules:
+	$(GO) run ./cmd/worker -schedules
+
+ops-health:
+	$(GO) run ./cmd/ops health
+
+ops-usage:
+	$(GO) run ./cmd/ops usage
 
 backfill:
 	$(GO) run ./cmd/worker -backfill

@@ -1,6 +1,10 @@
 # SELA AI System Design
 
-Version: 1.1
+Version: 1.2
+
+> Scope note (2026-11-21): scheduled weekly/monthly insights are MVP. Per-entry
+> journal analysis is post-MVP. Sensitive memory requires explicit consent. See
+> `10-product-vision-decisions.md`.
 
 ## 1. Purpose
 
@@ -25,8 +29,9 @@ Initial capabilities:
 3. Structured memory extraction.
 4. Hybrid retrieval.
 5. On-demand insight generation.
-6. Scheduled insight generation (post-MVP).
+6. Scheduled insight generation (MVP; user opt-in).
 7. Conversation summarization where useful.
+8. Per-entry journal analysis (post-MVP).
 
 ## 3. Architecture
 
@@ -145,6 +150,9 @@ Recommended context priority:
 
 A lower-priority source must not override a more direct and recent user statement without a clear reason.
 
+Sensitive memories are excluded from the context hierarchy unless active,
+recorded consent covers the current operation.
+
 ## 7. Memory Model
 
 SELA uses hybrid memory.
@@ -186,7 +194,9 @@ Each memory should include:
 - Memories must retain provenance.
 - Conflicting records must not be silently merged.
 - Users can correct or reject memories.
-- Sensitive memories require stricter handling.
+- Sensitive memories are skipped by default. They may be stored only with
+  explicit, recorded, revocable user consent, minimal content, and restricted
+  retrieval.
 - Stale memories should be re-evaluated.
 
 ## 8. RAG Strategy
@@ -296,6 +306,14 @@ Insights must:
 - Allow user correction.
 - Avoid producing an insight when evidence is insufficient.
 
+Scheduled insights are MVP. On-demand and scheduled insights share the same
+evidence, safety, budget, and ownership rules. Scheduled generation must be
+opt-in, timezone-aware, idempotent, cost-controlled, and easy to disable.
+
+Per-entry journal analysis is post-MVP. When delivered, it must be tied to one
+owned journal entry, stored separately from the original entry, and use the same
+evidence and uncertainty standards as insights.
+
 ## 12. Communication Style
 
 SELA should be:
@@ -320,6 +338,40 @@ SELA should avoid:
 - Unsupported certainty.
 
 Communication style may adapt to user preferences and conversation context.
+
+Adaptive style is behavioral, not only a profile label:
+
+- Gentle when the user is distressed.
+- Structured when the user is confused.
+- Direct when avoidance is clear.
+- Practical when the user asks for action.
+- Non-advisory when the user only wants to be heard.
+
+The Companion must be empathetic but not blindly agreeable. It may challenge an
+unsupported assumption when the available context supports the challenge. It
+must acknowledge the user's experience before offering an alternative
+perspective and must not shame, moralize, or force a conclusion.
+
+### Framework application
+
+Frameworks are internal thinking tools, not user-facing labels.
+
+- Select frameworks by relevance.
+- Do not force a framework into every response.
+- Do not name a framework unless the user asks or naming it clearly helps.
+- Use at most one or two frameworks in a single response.
+- Use the Life Priority Framework to order reflection and next steps, not as a
+  score or mandatory sequence.
+- Keep `Improve`, `Maintain`, and `Accept` as the only user-facing reflection
+  directions in the MVP.
+
+The proposed prompt changes are in:
+
+- `prompts/companion/v2.md`
+- `prompts/insight/v2.md`
+
+They are active. Deterministic safety, prompt-injection, and behavior gates pass;
+live model quality evaluation remains a separate manual step.
 
 ## 13. AI Safety
 
@@ -426,6 +478,33 @@ The following decisions are locked for the MVP and are detailed in `docs/backend
 - Observation, interpretation, and hypothesis are separate fields.
 - Insight content is immutable; user feedback is stored separately.
 - Evidence is validated for ownership and displayed with the insight.
+- Weekly and monthly scheduled insights are MVP.
+- Scheduled insights are opt-in, timezone-aware, idempotent, cost-controlled,
+  and easy to disable.
+- A scheduled job may complete with `budget_exhausted` when the user or global
+  AI budget is exhausted.
+- Per-entry journal analysis is post-MVP.
+
+### Sensitive Memory
+
+- Sensitive content is skipped by default.
+- With explicit, recorded, revocable consent, store only the minimum necessary
+  sensitive memory with provenance and restricted retrieval.
+- Sensitive memories are excluded from retrieval when consent is absent,
+  expired, or revoked.
+- Users can inspect, correct, reject, and delete sensitive memories.
+- Sensitive memories are not used for training.
+
+### Prompts
+
+- `companion/v1` and `insight/v1` remain the production prompts until v2 passes
+  evaluation.
+- `companion/v2` adds healthy challenge, behavioral adaptive style, framework
+  selection, and explicit non-diagnosis rules.
+- `insight/v2` adds framework selection and Life Priority guidance without
+  adding new user-facing labels.
+- Future prompt changes require a new version, evaluation run, and documented
+  decision.
 
 ### Safety and Evaluation
 
@@ -440,4 +519,5 @@ The following decisions are locked for the MVP and are detailed in `docs/backend
 - Apply per-user rate limits and monthly budget alerts.
 - Use provider prompt caching for stable instructions.
 - Track token usage and estimated cost per operation.
-- Disable non-essential scheduled generation when budgets are exhausted.
+- Disable scheduled generation when budgets are exhausted, and show the user
+  that the next scheduled run is budget-blocked.

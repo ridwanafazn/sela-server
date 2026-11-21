@@ -9,6 +9,7 @@
 # Build output
 /bin/
 /dist/
+/backups/
 *.exe
 *.test
 coverage.out

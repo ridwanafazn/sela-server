@@ -1,6 +1,6 @@
 # SELA Operations and Reliability
 
-Version: 1.1
+Version: 1.2
 
 ## 1. Objective
 
@@ -127,15 +127,25 @@ Use Cloud Run Jobs or a protected worker mechanism for execution.
 
 Do not use in-memory timers in Cloud Run services.
 
-Scheduled insight generation is post-MVP. The durable job infrastructure should be prepared for it, but no schedule preference API is included in the MVP.
+Scheduled insight generation is MVP.
 
-When introduced, scheduled insight generation should be:
+Requirements:
 
-- User-configurable.
-- Timezone-aware.
-- Idempotent.
-- Cost-controlled.
-- Easy to disable.
+- User-configurable weekly or monthly schedule.
+- Timezone-aware and based on the user's profile timezone.
+- Opt-in and easy to disable.
+- Idempotent; a schedule change must not create duplicate jobs or insights.
+- Cost-controlled by the existing AI budgets and rate limits.
+- Excludes drafts, deleted content, rejected memories, and superseded memories.
+- Uses the same evidence threshold as on-demand insights.
+- Produces an explicit `insufficient_evidence` outcome when evidence is
+  insufficient.
+- In-app delivery is required. Push notification delivery is a separate
+  decision.
+
+The backend implements fan-out with `sela-worker -schedules`. Cloud Scheduler or
+an equivalent trigger invokes it periodically; the normal worker then processes
+the queued insight jobs.
 
 ## 9. Observability
 
@@ -174,6 +184,10 @@ Monitor:
 - Failure count.
 - Retry count.
 - Processing duration.
+- Scheduled insight due, created, skipped, and failed counts.
+- Schedule lag and timezone-related failures.
+- Budget-blocked scheduled generations.
+- Opt-out rate for scheduled insights.
 
 ## 10. Logging
 
@@ -234,6 +248,7 @@ Cost controls:
 - Rate limits.
 - Bounded retries.
 - On-demand generation.
+- Opt-in scheduled generation with per-user and global budget checks.
 - Scheduled job limits.
 - Prompt caching where appropriate.
 

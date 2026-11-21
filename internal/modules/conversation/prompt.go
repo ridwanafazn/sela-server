@@ -11,7 +11,7 @@ import (
 	"github.com/ridwanafazn/sela-server/prompts"
 )
 
-var companionTemplate = template.Must(template.New("companion").Parse(prompts.CompanionV1))
+var companionTemplate = template.Must(template.New("companion").Parse(prompts.CompanionV2))
 
 // BuildSystemPrompt renders the versioned Companion system prompt with
 // retrieved memories and journal evidence.

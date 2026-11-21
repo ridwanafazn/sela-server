@@ -261,6 +261,11 @@ gcloud run worker-pools deploy sela-worker \
 This is cheaper for a personal deployment. It adds up to 1–2 minutes of queue
 latency for embeddings, memory extraction, insights, and account purge.
 
+Scheduled insights are implemented in the worker through the `-schedules` flag.
+Configure Cloud Scheduler or an equivalent trigger to run
+`sela-worker -schedules` every few minutes. The flag enqueues due weekly/monthly
+insights; the normal worker then processes them.
+
 ```bash
 gcloud run jobs deploy sela-worker \
   --image="$IMAGE" \

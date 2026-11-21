@@ -1,7 +1,12 @@
 # SELA AI Integration Guide
 
-Version: 1.1  
-Status: MVP baseline
+Version: 1.2
+
+Status: MVP baseline with 2026-11-21 product vision decisions
+
+> Scope note: scheduled weekly/monthly insights are MVP. Per-entry journal
+> analysis is post-MVP. Sensitive memory requires explicit consent. See
+> `docs/shared/10-product-vision-decisions.md`.
 
 ## 1. Purpose
 
@@ -309,6 +314,10 @@ This is an illustrative output shape; the backend validates it before persistenc
 - Require valid source identifiers.
 - Flag sensitive content.
 - Avoid extracting unnecessary sensitive data.
+- Sensitive content is skipped by default.
+- Sensitive content may be stored only with explicit, recorded, and revocable
+  user consent, minimal content, restricted retrieval, and a clear deletion
+  path.
 - Do not store full journal or message text in memory content.
 - Do not convert a temporary emotional state into a permanent characteristic.
 - Do not infer sensitive identity attributes without an explicit product need.
@@ -336,7 +345,7 @@ Insight generation should be a separate AI operation.
 
 Input:
 
-- User request or scheduled period (post-MVP).
+- User request or scheduled period (MVP).
 - Eligible journals.
 - Relevant conversations where permitted.
 - Relevant memories.
@@ -387,6 +396,30 @@ Insight generation runs as a durable job.
 
 Do not force a recommendation when evidence is insufficient.
 
+### Scheduled Insight Jobs
+
+Weekly and monthly scheduled insights are MVP.
+
+Requirements:
+
+- The user opts in and selects weekly or monthly cadence.
+- The schedule uses the profile timezone and can be disabled at any time.
+- A scheduler enqueues durable jobs for eligible users and periods.
+- Schedule creation and changes are idempotent.
+- Each run applies the same ownership, eligibility, evidence, safety, and budget
+  rules as an on-demand request.
+- Drafts, deleted content, rejected memories, and superseded memories are
+  excluded.
+- If evidence is insufficient, complete the job with `insufficient_evidence`
+  and do not create an insight row.
+- If the user or global AI budget is exhausted, complete the job with
+  `budget_exhausted` and do not call the provider.
+- In-app delivery is required. Push notification delivery is a separate
+  decision.
+
+Per-entry journal analysis is post-MVP. When delivered, it must be tied to one
+owned journal entry and stored separately from the original.
+
 ## 10. Prompt Construction
 
 Separate prompt components:
@@ -400,6 +433,8 @@ Define:
 - Safety boundaries.
 - Evidence requirements.
 - Privacy rules.
+- Framework selection rules.
+- Healthy challenge and adaptive style rules for Companion.
 
 ### User Preferences
 
@@ -436,6 +471,27 @@ Track:
 - Evaluation result.
 
 Avoid modifying production prompts without evaluation.
+
+### Prompt v2
+
+The active prompt versions are:
+
+- `prompts/companion/v2.md`
+- `prompts/insight/v2.md`
+
+The Companion prompt adds:
+
+- healthy challenge of unsupported assumptions;
+- behavioral adaptive style;
+- framework selection;
+- explicit non-diagnosis and non-shaming rules.
+
+The insight prompt adds framework selection and Life Priority guidance without
+adding new user-facing labels or scores.
+
+The v2 prompts are active. Deterministic safety, prompt-injection, and behavior
+gates pass. Live model quality evaluation remains a separate manual step. Future
+prompt changes require a new version, evaluation run, and documented decision.
 
 ## 12. Context and Token Budget
 
@@ -520,8 +576,12 @@ Maintain test cases for:
 - Insight evidence accuracy.
 - Tone.
 - Uncertainty handling.
+- Healthy challenge without shaming.
+- Adaptive style behavior.
+- Framework relevance and user burden.
 - Privacy leakage.
 - Prompt injection resistance.
+- Scheduled insight evidence and idempotency.
 
 Use versioned evaluation data.
 
@@ -562,6 +622,10 @@ Do not record full private prompts or journal content in ordinary logs.
 - [x] Offsets and content hash stored instead of chunk text.
 - [x] Async insight job and status endpoint implemented.
 - [x] Insight evidence threshold enforced.
+- [x] Scheduled weekly/monthly insight preferences and fan-out implemented.
+- [x] Sensitive memory consent and restricted retrieval implemented.
+- [x] Companion prompt v2 behavior and prompt-injection gates passing.
+- [x] Insight prompt v2 behavior gates passing.
 - [ ] Safety escalation and locale resources reviewed.
 - [x] Per-user and global cost limits configured.
 - [x] Prompt injection test set passing.
@@ -595,7 +659,8 @@ Adjustments:
 - Candidate memory: -0.05 and label it as a hypothesis.
 - Rejected, superseded, or deleted memory: exclude.
 - Draft journal: exclude.
-- Sensitive memory: apply the sensitivity policy before inclusion.
+- Sensitive memory: exclude unless active, recorded consent covers the
+  operation; otherwise apply the sensitivity policy before inclusion.
 
 Rules:
 
@@ -613,12 +678,19 @@ Prompt templates live in version control under a structure such as:
 ```text
 prompts/
 ├── companion/
-│   └── v1.md
+│   ├── v1.md
+│   └── v2.md
 ├── insight/
-│   └── v1.md
+│   ├── v1.md
+│   └── v2.md
 └── memory_extraction/
-    └── v1.md
+    ├── v1.md
+    └── v2.md
 ```
+
+The active versions are recorded in generated messages, insights, and job
+metadata. v1 remains available for rollback but is not selected by the
+application.
 
 Each template defines:
 
@@ -711,7 +783,8 @@ Initial controls:
 - Bounded retries.
 - Provider prompt caching for stable system instructions.
 - Per-user and global monthly budget alerts.
-- Disable non-essential scheduled generation when the budget is exhausted.
+- Disable scheduled generation when the budget is exhausted, and surface the
+  budget-blocked state in the schedule status.
 
 Track:
 

@@ -2,6 +2,8 @@ package memory
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -148,7 +150,7 @@ func (r *Repository) OwnedMemoryIDs(ctx context.Context, userID string, memoryID
 func (r *Repository) FindByNormalizedContent(ctx context.Context, userID, content string) (*Memory, error) {
 	var memory Memory
 	if err := r.db.WithContext(ctx).Raw(
-		`SELECT id, user_id, content, category, status, confidence, source_count,
+		`SELECT id, user_id, content, category, sensitivity, status, confidence, source_count,
 		        supersedes_memory_id, last_confirmed_at, created_at, updated_at, deleted_at
 		 FROM personal_memories
 		 WHERE user_id = ? AND deleted_at IS NULL
@@ -175,13 +177,14 @@ func (r *Repository) Create(ctx context.Context, memory *Memory, source SourceRe
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Exec(
 			`INSERT INTO personal_memories
-			 (id, user_id, content, category, status, confidence, source_count,
+			 (id, user_id, content, category, sensitivity, status, confidence, source_count,
 			  supersedes_memory_id, last_confirmed_at, created_at, updated_at)
-			 VALUES (?, ?, ?, ?, ?, ?, 0, ?, NULL, ?, ?)`,
+			 VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, NULL, ?, ?)`,
 			memory.ID,
 			memory.UserID,
 			memory.Content,
 			memory.Category,
+			sensitivityOrNormal(memory.Sensitivity),
 			memory.Status,
 			memory.Confidence,
 			memory.SupersedesMemoryID,
@@ -213,6 +216,17 @@ func (r *Repository) AddSource(ctx context.Context, memoryID string, source Sour
 		}
 		return r.refreshSourceCountTx(tx, memoryID, now)
 	})
+}
+
+// MarkSensitive upgrades an existing memory when a sensitive source is merged
+// into it. Sensitivity is never downgraded automatically.
+func (r *Repository) MarkSensitive(ctx context.Context, memoryID string, now time.Time) error {
+	return r.db.WithContext(ctx).Exec(
+		`UPDATE personal_memories
+		 SET sensitivity = 'sensitive', updated_at = ?
+		 WHERE id = ? AND deleted_at IS NULL AND sensitivity <> 'sensitive'`,
+		now, memoryID,
+	).Error
 }
 
 // AddConflicts records conflict relations for an existing memory.
@@ -331,13 +345,14 @@ func (r *Repository) CreateReplacement(ctx context.Context, replacement *Memory,
 func (r *Repository) CreateReplacementTx(tx *gorm.DB, replacement *Memory, originalID string) error {
 	if err := tx.Exec(
 		`INSERT INTO personal_memories
-		 (id, user_id, content, category, status, confidence, source_count,
+		 (id, user_id, content, category, sensitivity, status, confidence, source_count,
 		  supersedes_memory_id, last_confirmed_at, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)`,
+		 VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)`,
 		replacement.ID,
 		replacement.UserID,
 		replacement.Content,
 		replacement.Category,
+		sensitivityOrNormal(replacement.Sensitivity),
 		replacement.Status,
 		replacement.Confidence,
 		originalID,
@@ -398,7 +413,7 @@ func (r *Repository) refreshSourceCountTx(tx *gorm.DB, memoryID string, now time
 func (r *Repository) Get(ctx context.Context, userID, id string) (*Memory, error) {
 	var memory Memory
 	if err := r.db.WithContext(ctx).Raw(
-		`SELECT id, user_id, content, category, status, confidence, source_count,
+		`SELECT id, user_id, content, category, sensitivity, status, confidence, source_count,
 		        supersedes_memory_id, last_confirmed_at, created_at, updated_at, deleted_at
 		 FROM personal_memories
 		 WHERE id = ? AND user_id = ? AND deleted_at IS NULL`,
@@ -416,7 +431,7 @@ func (r *Repository) Get(ctx context.Context, userID, id string) (*Memory, error
 func (r *Repository) GetForUpdate(tx *gorm.DB, userID, id string) (*Memory, error) {
 	var memory Memory
 	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Raw(
-		`SELECT id, user_id, content, category, status, confidence, source_count,
+		`SELECT id, user_id, content, category, sensitivity, status, confidence, source_count,
 		        supersedes_memory_id, last_confirmed_at, created_at, updated_at, deleted_at
 		 FROM personal_memories
 		 WHERE id = ? AND user_id = ? AND deleted_at IS NULL`,
@@ -473,7 +488,7 @@ func (r *Repository) List(
 	afterID string,
 	limit int,
 ) ([]Memory, error) {
-	query := `SELECT id, user_id, content, category, status, confidence, source_count,
+	query := `SELECT id, user_id, content, category, sensitivity, status, confidence, source_count,
 	                 supersedes_memory_id, last_confirmed_at, created_at, updated_at, deleted_at
 	          FROM personal_memories
 	          WHERE user_id = ? AND deleted_at IS NULL AND status <> 'deleted'`
@@ -532,10 +547,20 @@ func (r *Repository) Sources(ctx context.Context, memoryID string) ([]SourceView
 func (r *Repository) RetrievalCandidates(ctx context.Context, userID string, limit int) ([]RetrievedMemory, error) {
 	var memories []RetrievedMemory
 	if err := r.db.WithContext(ctx).Raw(
-		`SELECT id, content, category, status, COALESCE(confidence, 0) AS confidence, updated_at
+		`SELECT id, content, category, sensitivity, status, COALESCE(confidence, 0) AS confidence, updated_at
 		 FROM personal_memories m
 		 WHERE m.user_id = ? AND m.deleted_at IS NULL
 		   AND m.status IN ('active', 'candidate')
+		   AND (
+		     m.sensitivity = 'normal'
+		     OR EXISTS (
+		       SELECT 1 FROM memory_consents mc
+		       WHERE mc.user_id = m.user_id
+		         AND mc.scope = 'sensitive_memory'
+		         AND mc.granted = true
+		         AND mc.revoked_at IS NULL
+		     )
+		   )
 		   AND (
 		     m.status = 'active'
 		     OR EXISTS (
@@ -557,6 +582,78 @@ func (r *Repository) RetrievalCandidates(ctx context.Context, userID string, lim
 		return nil, fmt.Errorf("load memory retrieval candidates: %w", err)
 	}
 	return memories, nil
+}
+
+// GetConsent returns one scoped consent record.
+func (r *Repository) GetConsent(ctx context.Context, userID, scope string) (*Consent, error) {
+	var consent Consent
+	if err := r.db.WithContext(ctx).Raw(
+		`SELECT id, user_id, scope, granted, granted_at, revoked_at, created_at, updated_at
+		 FROM memory_consents
+		 WHERE user_id = ? AND scope = ?`,
+		userID, scope,
+	).Scan(&consent).Error; err != nil {
+		return nil, fmt.Errorf("get memory consent: %w", err)
+	}
+	if consent.ID == "" {
+		return nil, gorm.ErrRecordNotFound
+	}
+	return &consent, nil
+}
+
+// UpsertConsent creates or updates a scoped consent record.
+func (r *Repository) UpsertConsent(ctx context.Context, consent *Consent) error {
+	return r.db.WithContext(ctx).Exec(
+		`INSERT INTO memory_consents
+		 (id, user_id, scope, granted, granted_at, revoked_at, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		 ON CONFLICT (user_id, scope) DO UPDATE SET
+		   granted = EXCLUDED.granted,
+		   granted_at = CASE
+		     WHEN EXCLUDED.granted THEN EXCLUDED.granted_at
+		     ELSE memory_consents.granted_at
+		   END,
+		   revoked_at = CASE
+		     WHEN EXCLUDED.granted THEN NULL
+		     ELSE EXCLUDED.revoked_at
+		   END,
+		   updated_at = EXCLUDED.updated_at`,
+		consent.ID,
+		consent.UserID,
+		consent.Scope,
+		consent.Granted,
+		consent.GrantedAt,
+		consent.RevokedAt,
+		consent.CreatedAt,
+		consent.UpdatedAt,
+	).Error
+}
+
+// HasSensitiveMemoryConsent reports whether the user has active consent for
+// sensitive memory storage and retrieval.
+func (r *Repository) HasSensitiveMemoryConsent(ctx context.Context, userID string) (bool, error) {
+	var granted bool
+	err := r.db.WithContext(ctx).Raw(
+		`SELECT granted
+		 FROM memory_consents
+		 WHERE user_id = ? AND scope = 'sensitive_memory'
+		   AND granted = true AND revoked_at IS NULL`,
+		userID,
+	).Row().Scan(&granted)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("check sensitive memory consent: %w", err)
+	}
+	return granted, nil
+}
+
+func sensitivityOrNormal(value string) string {
+	if value == SensitivitySensitive {
+		return SensitivitySensitive
+	}
+	return SensitivityNormal
 }
 
 func placeholders(count int) string {

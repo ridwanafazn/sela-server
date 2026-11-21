@@ -372,8 +372,18 @@ func (r *Repository) EligibleMemories(ctx context.Context, userID string, limit 
 	var records []SourceRecord
 	if err := r.db.WithContext(ctx).Raw(
 		`SELECT 'memory' AS type, id, updated_at AS date, content, NULL AS title, category
-		 FROM personal_memories
+		 FROM personal_memories m
 		 WHERE user_id = ? AND status = 'active' AND deleted_at IS NULL
+		   AND (
+		     sensitivity = 'normal'
+		     OR EXISTS (
+		       SELECT 1 FROM memory_consents mc
+		       WHERE mc.user_id = m.user_id
+		         AND mc.scope = 'sensitive_memory'
+		         AND mc.granted = true
+		         AND mc.revoked_at IS NULL
+		     )
+		   )
 		 ORDER BY updated_at DESC, id DESC
 		 LIMIT ?`,
 		userID, limit,

@@ -261,3 +261,37 @@ func TestLoadRejectsInvalidAIProvider(t *testing.T) {
 		t.Errorf("error = %q, want it to mention AI_PROVIDER", err)
 	}
 }
+
+func TestLoadRejectsUnexpectedStagingModel(t *testing.T) {
+	values := validValues()
+	values["APP_ENV"] = EnvStaging
+	values["AI_PROVIDER"] = "openai"
+	values["AI_BASE_URL"] = "https://openrouter.ai/api/v1"
+	values["AI_API_KEY"] = "test-key"
+	values["AI_MODEL"] = "another/model"
+
+	_, err := load(lookupFrom(values))
+	if err == nil {
+		t.Fatal("expected an error for an unexpected staging model")
+	}
+	if !strings.Contains(err.Error(), RequiredStagingModel) {
+		t.Errorf("error = %q, want it to mention %s", err, RequiredStagingModel)
+	}
+}
+
+func TestLoadAcceptsRequiredStagingModel(t *testing.T) {
+	values := validValues()
+	values["APP_ENV"] = EnvStaging
+	values["AI_PROVIDER"] = "openai"
+	values["AI_BASE_URL"] = "https://openrouter.ai/api/v1"
+	values["AI_API_KEY"] = "test-key"
+	values["AI_MODEL"] = RequiredStagingModel
+
+	cfg, err := load(lookupFrom(values))
+	if err != nil {
+		t.Fatalf("load returned error: %v", err)
+	}
+	if cfg.AI.Model != RequiredStagingModel {
+		t.Errorf("model = %q, want %q", cfg.AI.Model, RequiredStagingModel)
+	}
+}

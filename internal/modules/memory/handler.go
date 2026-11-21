@@ -164,6 +164,47 @@ func (h *Handler) Feedback(c *gin.Context) {
 	response.Data(c, http.StatusOK, detail)
 }
 
+// GetConsent handles GET /memory-consent.
+func (h *Handler) GetConsent(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
+
+	principal, ok := authn.From(c.Request.Context())
+	if !ok {
+		response.Error(c, apierrors.Unauthenticated("Authentication is required."))
+		return
+	}
+
+	view, err := h.service.GetConsent(c.Request.Context(), principal.UserID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Data(c, http.StatusOK, view)
+}
+
+// PutConsent handles PUT /memory-consent.
+func (h *Handler) PutConsent(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
+
+	principal, ok := authn.From(c.Request.Context())
+	if !ok {
+		response.Error(c, apierrors.Unauthenticated("Authentication is required."))
+		return
+	}
+
+	var request consentRequest
+	if !httpx.BindJSON(c, &request) {
+		return
+	}
+
+	view, err := h.service.SetConsent(c.Request.Context(), principal.UserID, *request.Granted)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Data(c, http.StatusOK, view)
+}
+
 func requireMemoryID(c *gin.Context) (string, bool) {
 	value := c.Param("memoryId")
 	if _, err := uuid.Parse(value); err != nil {

@@ -21,15 +21,32 @@ Our philosophy:
 
 Backend Phase 2 is complete and frozen at `v0.2.0`.
 
-- API contract: OpenAPI `1.3.0`.
-- Database schema: migration version `16`.
+- API contract: OpenAPI `1.4.0`.
+- Database schema: migration version `17` (pre-beta addendum).
 - Release notes: `CHANGELOG.md`.
 - Session handoff: `HANDOFF.md`.
+- Staging validation: `docs/backend/14-staging-validation.md`.
+- Staging without GCP: `docs/backend/15-staging-without-gcp.md`.
+- Beta hardening: `docs/backend/16-beta-hardening.md`.
 - Freeze checklist and next inputs: `docs/backend/10-phase-2-freeze.md`.
 - Active focus phase: `docs/backend/11-focus-phase.md`.
 
-The mobile application, staging deployment, real embedding provider, and Phase 3
-beta hardening are separate deliverables.
+The 2026-11-21 product vision review added a post-freeze MVP scope addendum:
+
+- Weekly and monthly scheduled insights are MVP. The backend schedule API and
+  fan-out are implemented; the staging scheduler trigger is pending.
+- Per-entry journal analysis is a core capability with post-MVP delivery.
+- Sensitive memory requires explicit, revocable consent; the backend consent
+  API and retrieval enforcement are implemented.
+- Companion and insight prompt v2 are active.
+- Mobile memory review, insight review, schedule controls, consent UI, and
+  editable profile preferences are MVP.
+
+See `docs/shared/10-product-vision-decisions.md`.
+
+The mobile application, staging deployment, real embedding provider, mobile
+memory/insight screens, live model quality evaluation, and Phase 3 beta
+hardening are separate deliverables.
 
 ## Repositories
 
@@ -82,6 +99,7 @@ sela-server/
 │   │   ├── 07-security-and-privacy.md
 │   │   ├── 08-operations-and-reliability.md
 │   │   ├── 09-roadmap.md
+│   │   ├── 10-product-vision-decisions.md
 │   │   ├── openapi.yaml
 │   │   └── database-erd.dbml
 │   └── backend/
@@ -157,7 +175,8 @@ If implementation conflicts with this documentation, document the reason and upd
 7. Security and privacy.
 8. Operations and reliability.
 9. Roadmap.
-10. Backend or Flutter implementation documents.
+10. Product vision decisions.
+11. Backend or Flutter implementation documents.
 
 ## Change Management
 

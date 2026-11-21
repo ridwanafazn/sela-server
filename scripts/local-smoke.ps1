@@ -12,6 +12,7 @@ param(
     [string]$LlmMode = "Fake",
     [string]$MockBaseUrl = "http://sela-mock-llm:9090/v1",
     [int]$JournalCount = 1,
+    [int]$AsyncWaitSeconds = 0,
     [switch]$SkipWorker,
     [switch]$KeepAccount
 )
@@ -98,6 +99,31 @@ Write-Host "PASS register ($($auth.data.user.id))"
 
 $headers = @{ Authorization = "Bearer $token" }
 
+$schedule = Invoke-RestMethod -Uri "$BaseUrl/insight-schedule" -Headers $headers
+if ($schedule.data.enabled) { throw "initial insight schedule is enabled" }
+$enabledSchedule = Invoke-RestMethod -Method Put -Uri "$BaseUrl/insight-schedule" -Headers $headers -ContentType "application/json" -Body (@{
+    enabled = $true
+    cadence = "weekly"
+} | ConvertTo-Json)
+if (-not $enabledSchedule.data.enabled -or $enabledSchedule.data.cadence -ne "weekly") {
+    throw "insight schedule did not enable"
+}
+$disabledSchedule = Invoke-RestMethod -Method Delete -Uri "$BaseUrl/insight-schedule" -Headers $headers
+if ($disabledSchedule.data.enabled) { throw "insight schedule did not disable" }
+Write-Host "PASS insight schedule lifecycle"
+
+$consent = Invoke-RestMethod -Uri "$BaseUrl/memory-consent" -Headers $headers
+if ($consent.data.granted) { throw "initial sensitive memory consent is granted" }
+$grantedConsent = Invoke-RestMethod -Method Put -Uri "$BaseUrl/memory-consent" -Headers $headers -ContentType "application/json" -Body (@{
+    granted = $true
+} | ConvertTo-Json)
+if (-not $grantedConsent.data.granted) { throw "sensitive memory consent did not grant" }
+$revokedConsent = Invoke-RestMethod -Method Put -Uri "$BaseUrl/memory-consent" -Headers $headers -ContentType "application/json" -Body (@{
+    granted = $false
+} | ConvertTo-Json)
+if ($revokedConsent.data.granted) { throw "sensitive memory consent did not revoke" }
+Write-Host "PASS memory consent lifecycle"
+
 $contents = @(
     "Hari ini saya merasa tenang setelah berjalan pagi. Saya ingin menjaga kebiasaan tidur lebih awal dan lebih sabar menghadapi pekerjaan.",
     "Saya sempat cemas soal pekerjaan, lalu mencoba menarik napas dan memilah mana yang bisa saya kendalikan.",
@@ -121,11 +147,20 @@ if ($list.data.Count -lt $JournalCount) { throw "journal list is missing entries
 Write-Host "PASS journal list ($($list.data.Count))"
 
 if (-not $SkipWorker) {
-    Invoke-WorkerOnce
-
-    $memories = Invoke-RestMethod -Uri "$BaseUrl/memories" -Headers $headers
-    $memorySource = if ($LlmMode -eq "Mock") { "mock provider" } else { "fake provider extracts none" }
-    Write-Host "PASS memories list ($($memories.data.Count) candidates; $memorySource)"
+    if ($WorkerMode -eq "None" -and $AsyncWaitSeconds -gt 0) {
+        $deadline = (Get-Date).AddSeconds($AsyncWaitSeconds)
+        do {
+            $memories = Invoke-RestMethod -Uri "$BaseUrl/memories" -Headers $headers
+            if ($memories.data.Count -gt 0) { break }
+            Start-Sleep -Seconds 2
+        } while ((Get-Date) -lt $deadline)
+        Write-Host "PASS memories list ($($memories.data.Count) candidates; external worker)"
+    } else {
+        Invoke-WorkerOnce
+        $memories = Invoke-RestMethod -Uri "$BaseUrl/memories" -Headers $headers
+        $memorySource = if ($LlmMode -eq "Mock") { "mock provider" } else { "fake provider extracts none" }
+        Write-Host "PASS memories list ($($memories.data.Count) candidates; $memorySource)"
+    }
 }
 
 $conversation = Invoke-RestMethod -Method Post -Uri "$BaseUrl/conversations" -ContentType "application/json" -Body (@{
@@ -151,8 +186,17 @@ if (-not $jobId) { throw "insight request did not return a job id" }
 Write-Host "PASS insight accepted ($jobId)"
 
 if (-not $SkipWorker) {
-    Invoke-WorkerOnce
-    $job = Invoke-RestMethod -Uri "$BaseUrl/insight-jobs/$jobId" -Headers $headers
+    if ($WorkerMode -eq "None" -and $AsyncWaitSeconds -gt 0) {
+        $deadline = (Get-Date).AddSeconds($AsyncWaitSeconds)
+        do {
+            $job = Invoke-RestMethod -Uri "$BaseUrl/insight-jobs/$jobId" -Headers $headers
+            if ($job.data.status -in @("completed", "failed")) { break }
+            Start-Sleep -Seconds 2
+        } while ((Get-Date) -lt $deadline)
+    } else {
+        Invoke-WorkerOnce
+        $job = Invoke-RestMethod -Uri "$BaseUrl/insight-jobs/$jobId" -Headers $headers
+    }
     Write-Host "INFO insight job status=$($job.data.status) outcome=$($job.data.outcome) insight_id=$($job.data.insight_id)"
     if ($job.data.status -eq "failed") {
         Write-Host "INFO insight failure is expected with the fake provider; the integration suite covers the real insight path."

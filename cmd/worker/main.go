@@ -38,6 +38,7 @@ func main() {
 func run() error {
 	once := flag.Bool("once", false, "process the currently available jobs and exit")
 	backfill := flag.Bool("backfill", false, "enqueue embedding and memory extraction jobs for all active journals, then exit")
+	schedules := flag.Bool("schedules", false, "enqueue due weekly and monthly insight jobs, then exit")
 	flag.Parse()
 
 	cfg, err := config.Load()
@@ -75,6 +76,26 @@ func run() error {
 		},
 		log,
 	)
+
+	if *schedules {
+		scheduleService := insight.NewScheduleService(
+			insight.NewRepository(db.Gorm),
+			job.NewQueue(db.Gorm),
+			usageService,
+			log,
+		)
+		result, err := scheduleService.FanOutDue(ctx)
+		if err != nil {
+			return err
+		}
+		log.Info("scheduled insight fan-out completed",
+			slog.Int("due", result.Due),
+			slog.Int("enqueued", result.Enqueued),
+			slog.Int("existing", result.Existing),
+			slog.Int("failed", result.Failed),
+		)
+		return nil
+	}
 
 	embeddings, err := ai.NewEmbedding(ctx, cfg.AI)
 	if err != nil {

@@ -40,7 +40,7 @@ const (
 	maxQuestionRunes     = 1000
 )
 
-var insightTemplate = template.Must(template.New("insight").Parse(prompts.InsightV1))
+var insightTemplate = template.Must(template.New("insight").Parse(prompts.InsightV2))
 
 var insightSchema = json.RawMessage(`{
   "type": "object",
@@ -187,6 +187,20 @@ func (s *GenerationService) Process(
 
 	if s.llm == nil {
 		return nil, fmt.Errorf("%w: language provider is not configured", ai.ErrInvalidRequest)
+	}
+	if s.usage != nil {
+		exhausted, err := s.usage.Exhausted(ctx, userID)
+		if err != nil {
+			s.log.WarnContext(ctx, "insight budget check failed",
+				slog.String("job_id", jobID),
+				slog.String("error", err.Error()),
+			)
+		} else if exhausted {
+			return &GenerationResult{
+				Outcome: OutcomeBudgetExhausted,
+				Message: "The AI budget for this period is exhausted. Scheduled reflection will resume when the budget resets.",
+			}, nil
+		}
 	}
 
 	var prompt strings.Builder

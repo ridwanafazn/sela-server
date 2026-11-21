@@ -1,7 +1,8 @@
 # SELA Roadmap
 
-Version: 1.2  
-Status: Phase 0 complete; Phase 1 ready to start
+Version: 1.3
+
+Status: Phase 0 complete; backend Phase 2 frozen; mobile Phase 1 code complete; pre-beta
 
 ## 1. Purpose
 
@@ -17,7 +18,7 @@ P0, P1, and P2 in earlier review notes were documentation priority levels. They 
 |---|---|---|
 | Phase 0 | Contract lock | Stable API, database, and decision baseline |
 | Phase 1 | Walking skeleton | End-to-end authentication and journal flow on staging |
-| Phase 2 | Core MVP | Journal, Companion, memory, and insight working end to end |
+| Phase 2 | Core MVP | Journal, Companion, memory, insight, and scheduled insight working end to end |
 | Phase 3 | Beta hardening | Secure, observable, offline-capable journaling ready for beta |
 | Phase 4 | Post-MVP depth | Deeper reflection features, privacy controls, and scale work |
 
@@ -86,12 +87,18 @@ Out of scope:
 - Memory extraction.
 - Insights.
 - Offline local database.
-- Scheduled insights.
+- Scheduled insights (delivered in Phase 2).
 
 ## 5. Phase 2 — Core MVP
 
 Backend status: complete and frozen at `v0.2.0` (2026-11-15). Mobile delivery
 and staging deployment remain separate work.
+
+Post-freeze scope addendum (2026-11-21): weekly and monthly scheduled insights
+are promoted to MVP. The backend schedule API, fan-out, consent API, and prompt
+v2 are implemented. Staging scheduler and mobile controls remain pending. The
+`v0.2.0` freeze remains a historical record; the addendum is tracked in
+`docs/backend/11-focus-phase.md`. See `10-product-vision-decisions.md`.
 
 Goal: deliver the core reflection loop.
 
@@ -105,24 +112,32 @@ Backend:
 - Memory extraction jobs and candidate review.
 - Insight generation jobs with evidence.
 - Insight feedback.
+- Weekly and monthly scheduled insight jobs with user opt-in.
+- User-configurable schedule preferences and timezone-aware scheduling.
+- Sensitive memory consent policy and restricted retrieval.
 - Account deletion job.
 - Basic communication preferences.
 
 Mobile:
 
+- A small optional guided writing prompt set.
 - Companion conversation list and chat.
 - Memory list, detail, sources, and feedback.
 - Insight list, asynchronous generation, job polling, evidence detail, and feedback.
-- Profile, communication preferences, and account deletion.
+- Scheduled insight opt-in, schedule editing, disable, and review.
+- Sensitive memory consent and revocation.
+- Profile, editable communication preferences, and account deletion.
 - Privacy explanation and deletion consequences.
 
 AI:
 
 - Prompt templates and versioning.
+- Prompt v2 for Companion challenge, adaptive style, and framework guidance.
 - Evidence threshold enforcement.
 - Safety escalation.
 - Evaluation dataset and quality gates.
 - Token and cost controls.
+- Scheduled insight budget and idempotency controls.
 
 Exit criteria:
 
@@ -130,15 +145,21 @@ Exit criteria:
 - Companion uses authorized personal context.
 - An insight includes evidence and confidence.
 - Insufficient evidence returns an explicit outcome, not a fabricated insight.
+- A user can start a journal from a small optional guided prompt.
+- A user can opt in to weekly or monthly insights and disable them at any time.
+- A scheduled insight is evidence-backed or returns `insufficient_evidence`.
+- Sensitive memories are skipped by default and stored only with explicit
+  consent.
 - Cross-user authorization tests pass.
 - Account deletion is tested.
 - AI operations have timeouts, retries, and usage tracking.
 
 Out of scope:
 
-- Journal analysis.
-- Scheduled insights.
+- Per-entry journal analysis (core capability, post-MVP delivery).
+- Full session inventory and revoke-all.
 - Privacy center.
+- Data export.
 - Full offline-first.
 - Multi-device sync.
 
@@ -196,8 +217,7 @@ Goal: add depth only when product evidence supports it.
 
 Candidates:
 
-- Journal analysis.
-- Scheduled insights.
+- Per-entry journal analysis.
 - Privacy center and granular consent.
 - Data export.
 - Push notifications.
@@ -263,5 +283,9 @@ A phase does not expand silently. New work goes into the next phase unless it is
 - Embeddings use Vertex AI with 768 dimensions.
 - Authentication uses HS256 with rotating refresh tokens.
 - Account deletion is in the MVP.
-- Journal analysis and scheduled insights are post-MVP.
+- Scheduled weekly and monthly insights are in the MVP.
+- Per-entry journal analysis is a core capability with post-MVP delivery.
+- Sensitive memory requires explicit consent; the default is skip.
+- Companion and insight prompt v2 are active. Deterministic gates pass; live
+  model quality evaluation remains manual.
 - Privacy center and data export are post-MVP.

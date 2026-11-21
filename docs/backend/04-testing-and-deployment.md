@@ -1,7 +1,8 @@
 # SELA Backend Testing and Deployment
 
-Version: 1.1  
-Status: MVP baseline
+Version: 1.2
+
+Status: MVP baseline with 2026-11-21 product vision decisions
 
 ## 1. Purpose
 
@@ -44,6 +45,12 @@ Test:
 - Journal version increment, `If-Match`, and conflict detection.
 - Journal change feed including tombstones.
 - Insight job creation, status transitions, and evidence persistence.
+- Scheduled insight preference persistence, timezone handling, and idempotency.
+- Scheduled insight opt-out and budget blocking.
+- Scheduled insight `insufficient_evidence` behavior.
+- Sensitive memory skipped by default.
+- Sensitive memory stored only with explicit consent and excluded after
+  revocation.
 - Idempotent message and insight requests.
 - Account deletion deactivation and purge job creation.
 - Refresh-token rotation and reuse detection.
@@ -66,6 +73,9 @@ Test:
 - Stale journal version returns 409.
 - Journal change feed returns tombstones.
 - Asynchronous insight acceptance and job status.
+- Scheduled insight enable, update, read, and disable.
+- Scheduled insight schedule changes do not create duplicate jobs.
+- Sensitive memory consent grant, read, and revoke.
 - Account deletion acceptance and re-authentication.
 
 ### AI Adapter Tests
@@ -98,6 +108,8 @@ Critical tests:
 - Invalid ownership references are rejected.
 - AI retrieval never returns unauthorized data.
 - Draft journals are excluded from retrieval and insights.
+- Sensitive memories are excluded from retrieval without active consent.
+- Sensitive memories are excluded after consent revocation.
 - Refresh-token reuse revokes the token family.
 - A deleted account cannot authenticate.
 - Duplicate idempotency keys do not create duplicate side effects.
@@ -395,9 +407,12 @@ Test recovery procedures periodically.
 - [ ] Unit tests pass.
 - [ ] Integration tests pass.
 - [ ] Authorization tests pass.
-- [ ] Async insight job tests pass.
-- [ ] Idempotency tests pass.
-- [ ] Account deletion tests pass.
+- [x] Async insight job tests pass.
+- [x] Scheduled insight preference, idempotency, and opt-out tests pass.
+- [x] Sensitive memory consent and revocation tests pass.
+- [x] Prompt v2 deterministic behavior gates pass.
+- [x] Idempotency tests pass.
+- [x] Account deletion tests pass.
 - [ ] OpenAPI validated.
 
 ### Database
@@ -428,8 +443,14 @@ Test recovery procedures periodically.
 ### Product and Privacy
 
 - [ ] Journal ownership verified.
-- [ ] Memory provenance verified.
-- [ ] Insight evidence verified.
+- [x] Memory provenance verified.
+- [x] Insight evidence verified.
+- [x] Schedule lifecycle and weekly scheduled generation verified locally;
+      monthly period computation is covered by unit tests.
+- [x] Sensitive memory consent verified, including revocation.
+- [x] Prompt v2 deterministic behavior verified.
+- [ ] Live model quality evaluation completed with the production model.
+- [ ] Staging scheduler trigger verified.
 - [ ] Sensitive logs reviewed.
 - [ ] Data deletion behavior tested.
 

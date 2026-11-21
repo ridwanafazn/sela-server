@@ -132,8 +132,9 @@ func BuildRouter(cfg *config.Config, log *slog.Logger, db *database.DB) (*gin.En
 	memoryService := memory.NewService(memoryRepo, log)
 	memoryHandler := memory.NewHandler(memoryService)
 
+	insightRepo := insight.NewRepository(db.Gorm)
 	insightService := insight.NewService(
-		insight.NewRepository(db.Gorm),
+		insightRepo,
 		queue,
 		limiter,
 		usageService,
@@ -144,6 +145,8 @@ func BuildRouter(cfg *config.Config, log *slog.Logger, db *database.DB) (*gin.En
 		log,
 	)
 	insightHandler := insight.NewHandler(insightService)
+	scheduleService := insight.NewScheduleService(insightRepo, queue, usageService, log)
+	scheduleHandler := insight.NewScheduleHandler(scheduleService)
 
 	conversationService := conversation.NewService(
 		conversation.NewRepository(db.Gorm),
@@ -198,10 +201,15 @@ func BuildRouter(cfg *config.Config, log *slog.Logger, db *database.DB) (*gin.En
 			protected.PATCH("/memories/:memoryId", memoryHandler.Update)
 			protected.DELETE("/memories/:memoryId", memoryHandler.Delete)
 			protected.POST("/memories/:memoryId/feedback", memoryHandler.Feedback)
+			protected.GET("/memory-consent", memoryHandler.GetConsent)
+			protected.PUT("/memory-consent", memoryHandler.PutConsent)
 
 			protected.GET("/insights", insightHandler.List)
 			protected.POST("/insights", insightHandler.Request)
 			protected.GET("/insight-jobs/:jobId", insightHandler.JobStatus)
+			protected.GET("/insight-schedule", scheduleHandler.Get)
+			protected.PUT("/insight-schedule", scheduleHandler.Put)
+			protected.DELETE("/insight-schedule", scheduleHandler.Delete)
 			protected.GET("/insights/:insightId", insightHandler.Get)
 			protected.DELETE("/insights/:insightId", insightHandler.Delete)
 			protected.POST("/insights/:insightId/feedback", insightHandler.Feedback)

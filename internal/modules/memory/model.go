@@ -13,12 +13,23 @@ const (
 	StatusDeleted    = "deleted"
 )
 
+// Memory sensitivity.
+const (
+	SensitivityNormal    = "normal"
+	SensitivitySensitive = "sensitive"
+)
+
+// ConsentScopeSensitiveMemory is the explicit consent required to store and
+// retrieve sensitive memories.
+const ConsentScopeSensitiveMemory = "sensitive_memory"
+
 // Memory is the persistence model for a personal memory.
 type Memory struct {
 	ID                 string     `gorm:"column:id;primaryKey;type:uuid"`
 	UserID             string     `gorm:"column:user_id;type:uuid"`
 	Content            string     `gorm:"column:content"`
 	Category           *string    `gorm:"column:category"`
+	Sensitivity        string     `gorm:"column:sensitivity"`
 	Status             string     `gorm:"column:status"`
 	Confidence         *float64   `gorm:"column:confidence"`
 	SourceCount        int        `gorm:"column:source_count"`
@@ -82,6 +93,7 @@ type View struct {
 	ID                 string     `json:"id"`
 	Content            string     `json:"content"`
 	Category           *string    `json:"category"`
+	Sensitivity        string     `json:"sensitivity"`
 	Status             string     `json:"status"`
 	Confidence         float64    `json:"confidence"`
 	SourceCount        int        `json:"source_count"`
@@ -138,12 +150,40 @@ type FeedbackInput struct {
 
 // RetrievedMemory is a memory ranked for Companion context.
 type RetrievedMemory struct {
-	ID         string
-	Content    string
-	Category   *string
-	Status     string
-	Confidence float64
-	UpdatedAt  time.Time
+	ID          string
+	Content     string
+	Category    *string
+	Sensitivity string
+	Status      string
+	Confidence  float64
+	UpdatedAt   time.Time
+}
+
+// Consent records explicit, revocable user permission for a scoped use of
+// personal data.
+type Consent struct {
+	ID        string     `gorm:"column:id;primaryKey;type:uuid"`
+	UserID    string     `gorm:"column:user_id;type:uuid"`
+	Scope     string     `gorm:"column:scope"`
+	Granted   bool       `gorm:"column:granted"`
+	GrantedAt *time.Time `gorm:"column:granted_at"`
+	RevokedAt *time.Time `gorm:"column:revoked_at"`
+	CreatedAt time.Time  `gorm:"column:created_at"`
+	UpdatedAt time.Time  `gorm:"column:updated_at"`
+}
+
+// TableName pins the table name.
+func (Consent) TableName() string {
+	return "memory_consents"
+}
+
+// ConsentView is the API representation of a memory consent.
+type ConsentView struct {
+	Scope     string     `json:"scope"`
+	Granted   bool       `json:"granted"`
+	GrantedAt *time.Time `json:"granted_at"`
+	RevokedAt *time.Time `json:"revoked_at"`
+	UpdatedAt *time.Time `json:"updated_at"`
 }
 
 func newView(memory *Memory) View {
@@ -155,6 +195,7 @@ func newView(memory *Memory) View {
 		ID:                 memory.ID,
 		Content:            memory.Content,
 		Category:           memory.Category,
+		Sensitivity:        memory.Sensitivity,
 		Status:             memory.Status,
 		Confidence:         confidence,
 		SourceCount:        memory.SourceCount,

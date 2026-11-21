@@ -389,6 +389,13 @@ Backend Phase 2 is frozen at `v0.2.0`; see
 - Evidence persistence.
 - User feedback.
 - Scheduled processing.
+- User-configurable weekly/monthly schedule preferences.
+- Timezone-aware, idempotent scheduled generation.
+- Sensitive memory consent and restricted retrieval.
+
+Post-freeze addendum: scheduled weekly/monthly insights are MVP. Per-entry
+journal analysis is post-MVP. See
+`docs/shared/10-product-vision-decisions.md`.
 
 ### Phase 5: Production
 

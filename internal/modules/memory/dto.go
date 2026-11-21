@@ -11,3 +11,7 @@ type feedbackRequest struct {
 	Action           string  `json:"action" binding:"required,oneof=confirm correct reject"`
 	CorrectedContent *string `json:"corrected_content"`
 }
+
+type consentRequest struct {
+	Granted *bool `json:"granted" binding:"required"`
+}

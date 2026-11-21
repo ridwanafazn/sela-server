@@ -1,6 +1,6 @@
 # SELA Product Frameworks
 
-Version: 1.0
+Version: 1.1
 
 ## 1. Purpose
 
@@ -419,3 +419,37 @@ A recommended reflective sequence:
 8. Agree on a small next step only when appropriate.
 
 Not every conversation needs to follow every step.
+
+## 18. Operationalization in AI
+
+Frameworks are internal guidance, not user-facing labels.
+
+Rules:
+
+- Select frameworks by relevance.
+- Do not force a framework into every response.
+- Do not name a framework unless the user asks or naming it clearly helps.
+- Use at most one or two frameworks in a single response.
+- The Life Priority Framework helps order reflection and next steps. It is not a
+  score, a diagnosis, or a mandatory sequence.
+- `Improve`, `Maintain`, and `Accept` remain the only user-facing reflection
+  directions in the MVP.
+- The Companion must be empathetic but not blindly agreeable. It may challenge
+  an unsupported assumption when the available context supports the challenge.
+- Adaptive style is behavioral:
+  - gentle when the user is distressed;
+  - structured when the user is confused;
+  - direct when avoidance is clear;
+  - practical when the user asks for action;
+  - non-advisory when the user only wants to be heard.
+- Per-entry journal analysis is post-MVP. When delivered, it must use the same
+  framework selection, evidence, and uncertainty standards as insights.
+
+The active Behavior prompts are:
+
+- `prompts/companion/v2.md`
+- `prompts/insight/v2.md`
+
+Framework use is covered by deterministic behavior tests for relevance,
+non-diagnosis, tone, and user burden. Live model quality evaluation remains a
+manual step before production journal use.

@@ -22,6 +22,10 @@ const (
 	EnvProduction  = "production"
 )
 
+// RequiredStagingModel is the only text model allowed for staging and
+// production when the OpenAI-compatible provider is used.
+const RequiredStagingModel = "deepseek/deepseek-v4.1-flash-1017"
+
 // Config is the complete runtime configuration.
 type Config struct {
 	App       App
@@ -199,7 +203,7 @@ func load(lookup func(string) (string, bool)) (*Config, error) {
 
 	httpCfg := HTTP{
 		ReadTimeout:     durationValue(lookup, "HTTP_READ_TIMEOUT", 10*time.Second, &problems),
-		WriteTimeout:    durationValue(lookup, "HTTP_WRITE_TIMEOUT", 30*time.Second, &problems),
+		WriteTimeout:    durationValue(lookup, "HTTP_WRITE_TIMEOUT", 180*time.Second, &problems),
 		IdleTimeout:     durationValue(lookup, "HTTP_IDLE_TIMEOUT", 60*time.Second, &problems),
 		ShutdownTimeout: durationValue(lookup, "HTTP_SHUTDOWN_TIMEOUT", 15*time.Second, &problems),
 		MaxBodyBytes:    int64Value(lookup, "HTTP_MAX_BODY_BYTES", 1<<20, &problems),
@@ -338,6 +342,12 @@ func load(lookup func(string) (string, bool)) (*Config, error) {
 	}
 	if aiCfg.MaxRetries < 0 || aiCfg.MaxRetries > 5 {
 		problems = append(problems, "AI_MAX_RETRIES must be between 0 and 5")
+	}
+	if isOneOf(appEnv, EnvStaging, EnvProduction) &&
+		aiCfg.Provider == "openai" &&
+		aiCfg.Model != RequiredStagingModel {
+		problems = append(problems,
+			"AI_MODEL must be "+RequiredStagingModel+" in staging and production")
 	}
 
 	if aiCfg.EmbeddingDimension != 768 {

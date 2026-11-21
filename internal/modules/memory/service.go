@@ -247,6 +247,7 @@ func (s *Service) Feedback(ctx context.Context, userID, memoryID string, input F
 				UserID:             userID,
 				Content:            *corrected,
 				Category:           memory.Category,
+				Sensitivity:        memory.Sensitivity,
 				Status:             StatusActive,
 				Confidence:         memory.Confidence,
 				SourceCount:        memory.SourceCount,
@@ -283,6 +284,50 @@ func (s *Service) Delete(ctx context.Context, userID, memoryID string) error {
 		}
 		return s.repo.SoftDelete(tx, memory, s.now().UTC())
 	})
+}
+
+// GetConsent returns the sensitive memory consent state.
+func (s *Service) GetConsent(ctx context.Context, userID string) (*ConsentView, error) {
+	consent, err := s.repo.GetConsent(ctx, userID, ConsentScopeSensitiveMemory)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return &ConsentView{Scope: ConsentScopeSensitiveMemory}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return consentView(consent), nil
+}
+
+// SetConsent grants or revokes sensitive memory consent.
+func (s *Service) SetConsent(ctx context.Context, userID string, granted bool) (*ConsentView, error) {
+	now := s.now().UTC()
+	id, err := ids.New()
+	if err != nil {
+		return nil, err
+	}
+	consent := &Consent{
+		ID:        id,
+		UserID:    userID,
+		Scope:     ConsentScopeSensitiveMemory,
+		Granted:   granted,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	if granted {
+		consent.GrantedAt = &now
+	} else {
+		consent.RevokedAt = &now
+	}
+	if err := s.repo.UpsertConsent(ctx, consent); err != nil {
+		return nil, err
+	}
+	return s.GetConsent(ctx, userID)
+}
+
+// HasSensitiveConsent reports whether sensitive memory storage and retrieval
+// are currently permitted.
+func (s *Service) HasSensitiveConsent(ctx context.Context, userID string) (bool, error) {
+	return s.repo.HasSensitiveMemoryConsent(ctx, userID)
 }
 
 // Retrieve returns memories relevant to a Companion message. Confirmed
@@ -447,4 +492,14 @@ func clampLimit(limit int) int {
 
 func memoryNotFound() *apierrors.Error {
 	return apierrors.NotFound("The memory was not found.")
+}
+
+func consentView(consent *Consent) *ConsentView {
+	return &ConsentView{
+		Scope:     consent.Scope,
+		Granted:   consent.Granted,
+		GrantedAt: consent.GrantedAt,
+		RevokedAt: consent.RevokedAt,
+		UpdatedAt: &consent.UpdatedAt,
+	}
 }

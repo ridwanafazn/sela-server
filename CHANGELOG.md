@@ -2,6 +2,81 @@
 
 All notable backend changes are recorded here.
 
+## Unreleased — B1 backend addendum — 2026-11-21
+
+### Added
+
+- Migration version `17` with `insight_schedules`, `memory_consents`, and
+  `personal_memories.sensitivity`.
+- `GET`, `PUT`, and `DELETE /insight-schedule`.
+- Weekly and monthly fan-out through `sela-worker -schedules`.
+- `GET` and `PUT /memory-consent`.
+- Sensitive memory extraction only with active consent.
+- Sensitive memory metadata and exclusion from Companion and Insight retrieval
+  without consent.
+- Active Companion and Insight prompt v2.
+- OpenAPI `1.4.0` contract for schedule and consent operations.
+- Staging preflight script and staging validation report.
+- Neon staging schema migrated to version `17`.
+- Local API/worker smoke test against Neon staging with fake providers.
+- Non-GCP local staging path: Docker API/worker/scheduler, Ollama embeddings,
+  OpenRouter DeepSeek, and ngrok.
+- Periodic scheduler command and container for non-GCP hosts.
+- Real-provider local staging verification: 768-dimensional Ollama embeddings,
+  DeepSeek Companion and insight generation, schedule/consent lifecycle, account
+  purge, and ngrok health check.
+- Local beta-hardening operations:
+  - `cmd/ops health` health gates,
+  - `cmd/ops usage` AI usage and cost report,
+  - `cmd/ops stale-memories` review count,
+  - PostgreSQL 17 backup and restore verification,
+  - incident runbook and security checklist.
+
+### Changed
+
+- Weekly and monthly scheduled insights are promoted to MVP.
+- Per-entry journal analysis is clarified as a core capability with post-MVP
+  delivery.
+- Frameworks and Life Priority are documented as internal guidance, not
+  user-facing labels or scores.
+- Companion and insight prompt v2 add healthy challenge, behavioral adaptive
+  style, framework guidance, and Life Priority guidance.
+- Insight feedback remains confirm/correct/reject; "explore further" is handled
+  through Companion.
+- Sensitive memory requires explicit, revocable consent; the default remains
+  skip.
+- Fixed technical decisions are recorded: HS256 + rotating refresh,
+  asynchronous `202` + job polling, and Vertex `gemini-embedding-001` at 768
+  dimensions.
+- Memory vocabulary is clarified: internal `superseded`/`deleted`; user-facing
+  "digantikan"/"dihapus"; no "archived" without an archive feature.
+
+### Documentation
+
+- Added `docs/shared/10-product-vision-decisions.md`.
+- Updated the product specification, frameworks, architecture, database design,
+  AI system design, API contract, security/privacy, operations, roadmap,
+  backend AI integration, testing, freeze addendum, focus phase, README, and
+  handoff.
+
+### Verification
+
+- `go test ./...`.
+- `go test -tags=integration ./...` against PostgreSQL with pgvector.
+- OpenAPI lint valid.
+- New unit and integration coverage for schedule lifecycle, fan-out
+  idempotency, weekly generation, consent grant/revoke, sensitive extraction,
+  and retrieval exclusion.
+- Neon staging smoke test with schedule and consent lifecycle, worker
+  processing, account purge, and log redaction.
+
+### Blocked
+
+- Cloud Run and Cloud Scheduler deployment require an active billing account
+  and enabled GCP APIs.
+- Vertex and OpenRouter validation require `VERTEX_PROJECT_ID` and
+  `AI_API_KEY`.
+
 ## v0.2.1 — Vertex embedding compatibility — 2026-11-15
 
 ### Fixed

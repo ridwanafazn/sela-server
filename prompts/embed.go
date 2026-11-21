@@ -8,8 +8,14 @@ import _ "embed"
 //go:embed companion/v1.md
 var CompanionV1 string
 
+// CompanionV2 is the active Companion system prompt. It adds healthy
+// challenge, behavioral adaptive style, and framework guidance.
+//
+//go:embed companion/v2.md
+var CompanionV2 string
+
 // CompanionVersion is stored with generated assistant messages and jobs.
-const CompanionVersion = "companion/v1"
+const CompanionVersion = "companion/v2"
 
 // MemoryExtractionV1 is the version 1 memory extraction system prompt.
 //
@@ -30,5 +36,11 @@ const MemoryExtractionVersion = "memory_extraction/v2"
 //go:embed insight/v1.md
 var InsightV1 string
 
+// InsightV2 is the active insight generation system prompt. It adds framework
+// selection and Life Priority guidance without changing the output schema.
+//
+//go:embed insight/v2.md
+var InsightV2 string
+
 // InsightVersion is stored with generated insights and jobs.
-const InsightVersion = "insight/v1"
+const InsightVersion = "insight/v2"

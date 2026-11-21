@@ -205,6 +205,7 @@ type JobPayload struct {
 	Focus          string `json:"focus"`
 	GenerationType string `json:"generation_type"`
 	RequestHash    string `json:"request_hash"`
+	ScheduleID     string `json:"schedule_id,omitempty"`
 }
 
 // GenerationResult is stored in scheduled_jobs.result.

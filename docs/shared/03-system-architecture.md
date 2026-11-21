@@ -1,6 +1,11 @@
 # SELA System Architecture
 
-Version: 1.0
+Version: 1.1
+
+> Scope note (2026-11-21): weekly and monthly scheduled insights are MVP.
+> Per-entry journal analysis is a core product capability with post-MVP
+> delivery. Sensitive memory requires explicit consent before storage and
+> retrieval. See `10-product-vision-decisions.md`.
 
 ## 1. Architecture Overview
 
@@ -129,7 +134,8 @@ Responsibilities:
 Responsibilities:
 
 - On-demand insight generation.
-- Scheduled insight generation.
+- Scheduled weekly and monthly insight generation.
+- User-configurable schedule preferences.
 - Evidence references.
 - Insight feedback.
 
@@ -212,6 +218,19 @@ Embeddings are disposable derived data and can be regenerated from eligible sour
 6. Insight is persisted.
 7. User reviews the result.
 
+### Scheduled Insight Generation
+
+1. User enables a weekly or monthly schedule.
+2. A scheduler enqueues durable jobs for eligible users and periods.
+3. The worker applies the user's timezone, ownership, eligibility, evidence
+   threshold, and AI budget.
+4. The insight is persisted with evidence, or the job completes with
+   `insufficient_evidence`.
+5. The user can disable the schedule at any time.
+
+Per-entry journal analysis is post-MVP. The MVP uses Companion and period-based
+insights as the journal reflection path.
+
 ## 7. Retrieval Architecture
 
 SELA uses hybrid retrieval.
@@ -266,6 +285,9 @@ Recommended approach:
 - The backend creates or claims durable jobs.
 - Workers process eligible jobs.
 - Failed jobs are retried according to policy.
+
+Scheduled insight generation is MVP. It must be user-configurable,
+timezone-aware, idempotent, cost-controlled, opt-in, and easy to disable.
 
 ## 10. Deployment Architecture
 
@@ -322,6 +344,9 @@ Never trust user IDs supplied in request bodies for ownership decisions.
 Use the authenticated identity as the authority.
 
 AI retrieval must only access records belonging to the authenticated user and eligible for the current operation.
+
+Sensitive memories may be stored only with explicit user consent. They must be
+excluded from retrieval when consent is absent, expired, or revoked.
 
 ## 14. Architecture Constraints
 

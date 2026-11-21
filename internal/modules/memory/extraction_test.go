@@ -125,7 +125,7 @@ func TestValidateCandidateRejectsUnsafeOutput(t *testing.T) {
 			candidate := base
 			test.mutate(&candidate)
 
-			_, accepted, sensitive, err := service.validateCandidate(t.Context(), entry, candidate)
+			_, accepted, sensitive, err := service.validateCandidate(t.Context(), entry, candidate, false)
 			if err != nil {
 				t.Fatalf("validateCandidate: %v", err)
 			}
@@ -165,12 +165,44 @@ func TestValidateCandidateRejectsInventedSource(t *testing.T) {
 		Sensitivity:   "normal",
 	}
 
-	_, accepted, _, err := service.validateCandidate(t.Context(), entry, candidate)
+	_, accepted, _, err := service.validateCandidate(t.Context(), entry, candidate, false)
 	if err != nil {
 		t.Fatalf("validateCandidate: %v", err)
 	}
 	if accepted {
 		t.Error("candidate with a source that was not provided was accepted")
+	}
+}
+
+func TestValidateCandidateStoresSensitiveWithConsent(t *testing.T) {
+	entry := &extractionSource{
+		Type:    sourceTypeJournal,
+		ID:      "11111111-1111-1111-1111-111111111111",
+		Content: "A medical detail I chose to share.",
+	}
+	service := &ExtractionService{repo: &fakeExtractionRepository{
+		eligible:         map[string]bool{entry.ID: true},
+		sensitiveConsent: true,
+	}}
+	confidence := 0.8
+	candidate := extractedMemory{
+		Category:      "health",
+		Content:       "The user shared a sensitive health detail.",
+		Confidence:    &confidence,
+		CertaintyType: "explicit",
+		SourceIDs:     []string{entry.ID},
+		Sensitivity:   "sensitive",
+	}
+
+	validated, accepted, skipped, err := service.validateCandidate(t.Context(), entry, candidate, true)
+	if err != nil {
+		t.Fatalf("validateCandidate: %v", err)
+	}
+	if !accepted || skipped {
+		t.Fatalf("accepted = %v, skipped = %v; want accepted sensitive candidate", accepted, skipped)
+	}
+	if validated.Sensitivity != SensitivitySensitive {
+		t.Errorf("sensitivity = %q, want %q", validated.Sensitivity, SensitivitySensitive)
 	}
 }
 
@@ -254,15 +286,16 @@ func TestRankMemoriesRespectsLimit(t *testing.T) {
 }
 
 type fakeExtractionRepository struct {
-	entry       *JournalSource
-	message     *MessageSource
-	eligible    map[string]bool
-	eligibleMsg map[string]bool
-	owned       map[string]bool
-	existing    *Memory
-	created     []*Memory
-	added       int
-	conflicts   int
+	entry            *JournalSource
+	message          *MessageSource
+	eligible         map[string]bool
+	eligibleMsg      map[string]bool
+	owned            map[string]bool
+	existing         *Memory
+	created          []*Memory
+	added            int
+	conflicts        int
+	sensitiveConsent bool
 }
 
 func (f *fakeExtractionRepository) JournalForExtraction(context.Context, string) (*JournalSource, error) {
@@ -309,6 +342,10 @@ func (f *fakeExtractionRepository) OwnedMemoryIDs(_ context.Context, _ string, i
 	return result, nil
 }
 
+func (f *fakeExtractionRepository) HasSensitiveMemoryConsent(context.Context, string) (bool, error) {
+	return f.sensitiveConsent, nil
+}
+
 func (f *fakeExtractionRepository) FindByNormalizedContent(context.Context, string, string) (*Memory, error) {
 	if f.existing == nil {
 		return nil, gorm.ErrRecordNotFound
@@ -318,6 +355,10 @@ func (f *fakeExtractionRepository) FindByNormalizedContent(context.Context, stri
 
 func (f *fakeExtractionRepository) AddSource(context.Context, string, SourceRef, time.Time) error {
 	f.added++
+	return nil
+}
+
+func (f *fakeExtractionRepository) MarkSensitive(context.Context, string, time.Time) error {
 	return nil
 }
 

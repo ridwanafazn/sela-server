@@ -1,0 +1,51 @@
+name: sela-staging-local
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: sela-server:staging-local
+    env_file:
+      - .env.staging.local
+    ports:
+      - "18080:8080"
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: sela-server:staging-local
+    env_file:
+      - .env.staging.local
+    entrypoint: ["/usr/local/bin/sela-worker"]
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: sela-server:staging-local
+    env_file:
+      - .env.staging.local
+    entrypoint: ["/usr/local/bin/sela-scheduler"]
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  ollama:
+    profiles: ["ollama"]
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    restart: unless-stopped
+
+volumes:
+  ollama-data:

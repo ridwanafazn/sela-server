@@ -71,6 +71,27 @@ func TestSafetyEvaluationGate(t *testing.T) {
 	}
 }
 
+func TestCompanionPromptV2BehavioralRequirements(t *testing.T) {
+	prompt, err := conversation.BuildSystemPrompt("en", "adaptive", nil, nil, "")
+	if err != nil {
+		t.Fatalf("build companion prompt: %v", err)
+	}
+	required := []string{
+		"Healthy challenge",
+		"Adaptive style",
+		"Reflection approach",
+		"not a clinician",
+		"untrusted",
+		"do not diagnose",
+	}
+	lower := strings.ToLower(prompt)
+	for _, want := range required {
+		if !strings.Contains(lower, strings.ToLower(want)) {
+			t.Errorf("companion prompt is missing %q", want)
+		}
+	}
+}
+
 func TestPromptInjectionEvaluationGate(t *testing.T) {
 	data := loadDataset(t)
 	passed := 0

@@ -1,6 +1,10 @@
 # SELA Security and Privacy
 
-Version: 1.1
+Version: 1.2
+
+> Scope note (2026-11-21): sensitive memory requires explicit, recorded, and
+> revocable user consent. The default remains skip. See
+> `10-product-vision-decisions.md`.
 
 ## 1. Security Objective
 
@@ -136,6 +140,8 @@ Users should be able to:
 - Delete memories.
 - Delete journals.
 - Delete conversations.
+- View and revoke sessions (current session in MVP; full session inventory and
+  revoke-all are post-MVP).
 - Delete their account.
 
 The system must explain relevant consequences of deletion.
@@ -169,15 +175,25 @@ Do not promise immediate deletion from backups unless the infrastructure process
 
 ## 11. Sensitive Memory Handling
 
-Sensitive information should not be extracted into long-term memory without a clear product need.
+Sensitive information is skipped by default. It must not be extracted into
+long-term memory without explicit, recorded, and revocable user consent.
 
-Prefer:
+With consent:
 
-- Minimal retention.
-- Explicit source references.
-- Restricted retrieval.
-- Clear user control.
-- Re-evaluation of stale information.
+- Store only the minimum necessary sensitive memory.
+- Retain explicit source references and confidence.
+- Restrict retrieval to operations covered by the consent.
+- Allow the user to inspect, correct, reject, and delete the memory.
+- Allow the user to revoke consent at any time.
+- Re-evaluate or delete stale sensitive memories.
+- Do not use sensitive memories for model training.
+
+Consent must be specific. It must not be bundled into a generic "accept all"
+action. When consent is absent, expired, or revoked, the sensitive memory must be
+excluded from retrieval and AI context.
+
+The MVP exposes `GET /memory-consent` and `PUT /memory-consent` for the
+sensitive-memory scope. Memory responses include a `sensitivity` field.
 
 Do not infer sensitive identity attributes without an explicit, justified need.
 
@@ -258,3 +274,8 @@ Before production:
 - Rate limits configured.
 - Dependency vulnerabilities reviewed.
 - Incident process documented.
+- Sensitive memory consent tested, including revocation and exclusion from
+  retrieval.
+- Crisis resources reviewed by a named reviewer before real journal data.
+- Data export, age gating, and consent-center scope decided before public
+  launch.

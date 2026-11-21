@@ -1,7 +1,8 @@
 # SELA Database Design
 
-Version: 1.2  
-Status: P0 schema decisions locked
+Version: 1.4
+
+Status: P0 schema decisions locked, with 2026-11-21 product vision decisions
 
 ## 1. Database Strategy
 
@@ -223,6 +224,7 @@ Fields:
 - user_id.
 - content.
 - category, nullable.
+- sensitivity: `normal` or `sensitive`.
 - status: `candidate`, `active`, `rejected`, `superseded`, `deleted`.
 - confidence, 0 to 1.
 - source_count.
@@ -239,10 +241,41 @@ Rules:
 - `active` means the memory is confirmed or otherwise eligible with normal priority.
 - `rejected` memories are excluded from retrieval.
 - `superseded` memories are retained for audit but excluded from retrieval.
+  User-facing copy is "digantikan", not "archived".
 - `deleted` memories are soft-deleted and excluded from default lists.
+  User-facing copy is "dihapus".
 - Conflicting records MUST NOT be silently merged.
 - If all sources for a memory are deleted, set it to `candidate` with `source_count = 0` for review.
 - `supersedes_memory_id` records replacement without destroying the old record.
+- Sensitive content is skipped by default. It may be stored only with explicit
+  user consent, minimal content, restricted retrieval, and a revocable consent
+  record.
+- Sensitive memories are excluded from Companion and Insight retrieval unless
+  active consent exists.
+
+### memory_consents
+
+Stores explicit, revocable consent for scoped memory use.
+
+Fields:
+
+- id.
+- user_id.
+- scope: `sensitive_memory`.
+- granted.
+- granted_at, nullable.
+- revoked_at, nullable.
+- created_at.
+- updated_at.
+
+Rules:
+
+- One row per user and scope.
+- `granted = true` with `revoked_at IS NULL` means consent is active.
+- Revoking consent preserves the historical grant time and sets `revoked_at`.
+- Sensitive memories are excluded from retrieval when consent is absent or
+  revoked.
+- Account deletion cascades through `user_id`.
 
 ### memory_sources
 
@@ -316,6 +349,12 @@ Rules:
 - `observation`, `interpretation`, and `hypothesis` are separate fields.
 - Insight content is immutable. User feedback is stored separately.
 - If evidence is insufficient, do not create an insight row.
+- `generation_type` supports `on_demand`, `weekly`, and `monthly`. Weekly and
+  monthly scheduled insights are MVP.
+- Scheduled insight generation must use the same evidence threshold and
+  idempotency rules as on-demand generation.
+- A user-configurable schedule preference record is required for scheduled
+  insights. Its exact schema is an implementation decision pending design.
 
 ### insight_evidence
 
@@ -358,6 +397,31 @@ Rules:
 - Feedback is append-only for audit.
 - The latest feedback is returned in the insight response.
 - Feedback does not modify the AI-generated insight content.
+
+### insight_schedules
+
+Stores one weekly or monthly reflection schedule per user.
+
+Fields:
+
+- id.
+- user_id, unique.
+- cadence: `weekly` or `monthly`.
+- timezone.
+- enabled.
+- next_run_at.
+- last_run_at, nullable.
+- created_at.
+- updated_at.
+
+Rules:
+
+- One active schedule row per user.
+- `next_run_at` is stored in UTC and computed from the profile timezone.
+- The scheduler only selects `enabled = true` rows whose `next_run_at` is due.
+- Fan-out is idempotent per user and period.
+- The next run is advanced only after a job is enqueued.
+- Account deletion cascades through `user_id`.
 
 ### ai_usage_events
 
@@ -637,12 +701,14 @@ The index `journals(user_id, updated_at, id)` supports incremental synchronizati
 
 The following are deferred to the next development phase:
 
-- Granular `user_preferences` and privacy-consent records.
+- Granular `user_preferences` and broader privacy-consent records.
 - `journal_analyses` and retrieval of stored journal analysis.
-- User-configurable scheduled insight preferences.
 - Data export records.
 - Audit-log tables beyond insight feedback and idempotency.
 - Row-level security evaluation.
+
+Scheduled insight preferences and sensitive memory consent are implemented in
+migration `17`.
 
 ## 14. Database ERD
 

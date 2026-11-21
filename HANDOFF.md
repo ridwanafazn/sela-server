@@ -1,6 +1,6 @@
 # Session Handoff
 
-Last updated: 2026-11-16 (local verification session)
+Last updated: 2026-11-21 (product vision reconciliation)
 
 ## Current state
 
@@ -10,23 +10,114 @@ Last updated: 2026-11-16 (local verification session)
   - `f4d0da1` — staging runbook and Neon free-tier notes
   - `ada9f8d` — local verification handoff
   - a local test-harness commit on top
+- Working tree: B1 backend addendum and documentation changes are uncommitted.
 - Release tags:
   - `v0.2.0` — Phase 2 backend freeze
   - `v0.2.1` — Vertex 768-dimensional embedding compatibility
-- API contract: OpenAPI `1.3.0`
-- Database schema: migration version `16`
+- API contract: OpenAPI `1.4.0`
+- Database schema: migration version `17` (pre-beta addendum; `v0.2.0` shipped at 16)
 - Backend Phase 2: complete and frozen (`10/10` internal stages)
+
+## Product vision reconciliation — 2026-11-21
+
+The product vision review changed the MVP scope. Decisions are recorded in
+`docs/shared/10-product-vision-decisions.md`.
+
+- Weekly and monthly scheduled insights are promoted to MVP.
+- Per-entry journal analysis is a core capability with post-MVP delivery.
+- Frameworks and Life Priority remain internal guidance, not user-facing labels
+  or scores.
+- Companion and insight prompt v2 are active. Deterministic safety,
+  prompt-injection, and behavior gates pass; live model quality evaluation
+  remains manual.
+- Insight feedback remains confirm/correct/reject. "Explore further" goes
+  through Companion.
+- Sensitive memory requires explicit, revocable consent; the default remains
+  skip.
+- Fixed technical decisions: HS256 + rotating refresh, asynchronous `202` + job
+  polling, Vertex `gemini-embedding-001` at 768 dimensions.
+- Memory vocabulary: internal `superseded`/`deleted`; user-facing
+  "digantikan"/"dihapus"; no "archived" without an archive feature.
+
+The canonical docs, README, roadmap, security/privacy, operations, backend AI
+integration, testing, freeze addendum, and focus phase were updated. Code,
+schema, OpenAPI, and production prompts were intentionally not changed.
+
+## B1 backend addendum — 2026-11-21
+
+Implemented:
+
+- Migration version `17`: `insight_schedules`, `memory_consents`, and
+  `personal_memories.sensitivity`.
+- `GET`, `PUT`, and `DELETE /insight-schedule`.
+- Weekly/monthly fan-out with `sela-worker -schedules`.
+- `GET` and `PUT /memory-consent`.
+- Sensitive memory extraction only with active consent.
+- Sensitive memory exclusion from Companion and Insight retrieval without
+  consent.
+- Active `companion/v2` and `insight/v2`.
+- OpenAPI `1.4.0` contract updates.
+
+Verification:
+
+- `go test ./...` passed.
+- `go test -tags=integration ./...` passed against PostgreSQL + pgvector.
+- OpenAPI lint is valid with four pre-existing warnings.
+- Unit and integration tests cover schedule lifecycle, fan-out idempotency,
+  weekly generation, consent grant/revoke, sensitive extraction, and retrieval
+  exclusion.
+
+## B2 staging validation — 2026-11-21
+
+Completed:
+
+- Neon staging migrated from schema `16` to `17`.
+- Verified `insight_schedules`, `memory_consents`, and
+  `personal_memories.sensitivity`.
+- Local API and worker ran against Neon staging with fake providers.
+- Smoke test passed: health, auth, schedule lifecycle, consent lifecycle,
+  journals, worker, Companion, insight request, account deletion, purge, and
+  deleted-account login block.
+- No journal or message content appeared in API logs.
+- Container image `sela-server:b2-local` built.
+- Added `scripts/staging-preflight.ps1`.
+- Added `docs/backend/14-staging-validation.md`.
+- Added and verified a non-GCP local staging path:
+  - `compose.staging.yml`,
+  - `scripts/staging-local-init.ps1`,
+  - `scripts/staging-local.ps1`,
+  - `docs/backend/15-staging-without-gcp.md`.
+- Real-provider verification:
+  - OpenRouter `deepseek/deepseek-v4.1-flash-1017`,
+  - Ollama `nomic-embed-text` 768 dimensions,
+  - 3 embeddings, 8 memory candidates, 1 insight,
+  - Companion reply, schedule/consent lifecycle, account purge,
+  - ngrok tunnel health check.
+
+Blocked:
+
+- Billing is disabled for `sela-513807`.
+- Cloud Run, Artifact Registry, Cloud Build, Secret Manager, Cloud Scheduler,
+  and Vertex AI APIs are disabled.
+- `.env.staging` still needs `AI_API_KEY`. `VERTEX_PROJECT_ID` is now set to
+  `sela-513807` locally.
+- `SAFETY_RESOURCES_FILE` is empty.
 
 ## Pre-Beta position
 
 Workstreams from `docs/backend/11-focus-phase.md`:
 
-1. Real embeddings and live evaluation — not started.
-2. Staging deployment — in progress. Neon schema is applied; GCP is blocked on
-   an active billing account.
-3. Mobile MVP — not started.
-4. Beta hardening — not started.
-5. Offline-first — deferred.
+1. Real Vertex embeddings and live model evaluation — not started. Prompt v2 is
+   active; deterministic gates pass.
+2. Scheduled insights MVP addendum — backend implemented; staging scheduler
+   trigger pending.
+3. Staging deployment — Neon schema `17` is applied and locally smoke-tested;
+   GCP deployment is blocked on billing and disabled APIs.
+4. Mobile MVP, including memory, insights, schedule controls, and editable
+   profile preferences — not started.
+5. Beta hardening - local backend checks implemented; hosted monitoring and
+   clinical review pending. See `docs/backend/16-beta-hardening.md`.
+6. Offline-first - deferred.
 
 The immediate blocker is billing for `sela-513807`. The staging runbook
 (`docs/backend/13-staging-runbook.md`) is ready to execute once billing is
@@ -209,15 +300,31 @@ Required staging secrets:
    `scripts/local-smoke.ps1 -BaseUrl <staging>/api/v1 -WorkerMode GCloud -JournalCount 3`.
 6. Verify logs, backup/restore, and account purge.
 7. Review crisis resources before entering real journal data.
-8. Build the Android Flutter MVP against the staging API.
+8. Configure the staging Cloud Scheduler trigger for `sela-worker -schedules`.
+9. Run the staging smoke test for schedule enable/disable and consent
+   grant/revoke.
+10. Build the Android Flutter MVP against the staging API, including memory
+    review, insight review, schedule controls, consent UI, and editable profile
+    preferences.
 
 ## Known gaps
 
 - Mobile app is in `C:\Users\Ridwan\Git-v2\sela-mobile`. Phase 1 code is
   complete, but staging and Android-device validation are pending.
-- Staging is not deployed.
+- Mobile memory review, insight review, schedule controls, sensitive memory
+  consent, editable profile preferences, and the guided writing prompt set are
+  not implemented.
+- Scheduled insights are implemented in the backend. The staging scheduler
+  trigger and mobile controls are pending.
+- Per-entry journal analysis is post-MVP and not implemented.
+- Sensitive memory consent is implemented in the backend. The mobile consent UI
+  is pending.
+- Prompt v2 is active. Live model quality evaluation remains manual.
+- Staging is not deployed. Billing and the required GCP APIs are disabled.
+- `.env.staging` still needs `AI_API_KEY`; `VERTEX_PROJECT_ID` is set locally.
 - `GET /journal-changes` and offline-first sync are Phase 3.
-- Metrics dashboards, alerts, backup automation, and incident runbook are Phase 3.
+- Local health gates, AI usage report, backup/restore verification, and incident
+  runbook are implemented. Hosted dashboards/alerts are deferred with GCP.
 - Live model quality evaluation for tone, facts, and hallucination is manual.
 - Embedded crisis resources need local clinical review.
 - Real semantic retrieval still needs Vertex or Ollama plus `make backfill`.
@@ -232,10 +339,15 @@ Required staging secrets:
 ## Useful docs
 
 - `CHANGELOG.md`
+- `docs/shared/10-product-vision-decisions.md`
 - `docs/backend/10-phase-2-freeze.md`
 - `docs/backend/11-focus-phase.md`
 - `docs/backend/12-cloud-run-neon-vertex-setup.md`
 - `docs/backend/13-staging-runbook.md`
+- `docs/backend/14-staging-validation.md`
+- `docs/backend/15-staging-without-gcp.md`
+- `docs/backend/16-beta-hardening.md`
+- `scripts/staging-preflight.ps1`
 - `docs/backend/09-safety-evaluation-cost.md`
 - `docs/shared/openapi.yaml`
 - `docs/shared/04-database-design.md`

@@ -1,7 +1,12 @@
 # SELA Product Specification
 
-Version: 1.1  
-Status: MVP baseline
+Version: 1.2
+
+Status: MVP baseline with 2026-11-21 product vision decisions
+
+> Scope note: weekly and monthly scheduled insights are MVP. Per-entry journal
+> analysis is a core product capability with post-MVP delivery. Sensitive
+> memory requires explicit consent. See `10-product-vision-decisions.md`.
 
 ## 1. Product Overview
 
@@ -98,11 +103,13 @@ Purpose: capture personal experiences and thoughts.
 Features:
 
 - Free-form journal writing.
-- Guided writing prompts.
+- Guided writing prompts (core capability; the mobile MVP may expose a small
+  optional set, with a full prompt library post-MVP).
 - Journal history.
 - Journal detail.
 - Search and filtering.
-- Optional AI analysis initiated by the user (post-MVP).
+- AI analysis initiated by the user (core product capability; post-MVP
+  delivery).
 
 Requirements:
 
@@ -110,6 +117,8 @@ Requirements:
 - AI analysis must be stored separately.
 - Users can edit and delete their own entries.
 - Journal entries must not automatically become definitive psychological facts.
+- Per-entry journal analysis is not part of the MVP. The MVP delivers free
+  writing, Companion reflection, and period-based insights.
 
 ### 5.2 Companion
 
@@ -139,8 +148,11 @@ Purpose: identify meaningful patterns from journals and conversations.
 Features:
 
 - On-demand insight generation.
-- Weekly summaries (post-MVP).
-- Monthly reflections (post-MVP).
+- Weekly summaries (MVP; user opt-in).
+- Monthly reflections (MVP; user opt-in).
+- User-configurable weekly or monthly schedule.
+- Timezone-aware scheduling.
+- Ability to disable scheduled insights at any time.
 - Pattern observations.
 - Evidence references.
 - User feedback.
@@ -157,6 +169,10 @@ Each insight should include:
 
 Insights must not present hypotheses as established facts.
 
+Scheduled insights use the same evidence threshold as on-demand insights. The
+system must not create a scheduled insight when evidence is insufficient. In-app
+delivery is required; push notification delivery is a separate decision.
+
 ### 5.4 My Profile
 
 Purpose: manage identity, preferences, and personal context.
@@ -170,8 +186,13 @@ Features:
 - Memory management.
 - Privacy settings.
 - Account management.
+- Session management (current-session logout in MVP; full session inventory and
+  revoke-all are post-MVP).
 
 Users should have control over what personal context is used by SELA.
+
+The MVP profile records display name, language, timezone, and communication
+style. Personal goals and reflection preferences are post-MVP.
 
 ## 6. MVP Scope
 
@@ -187,6 +208,12 @@ Users should have control over what personal context is used by SELA.
 - Basic structured memory.
 - User memory feedback.
 - On-demand insights.
+- Scheduled weekly and monthly insights with user opt-in.
+- Mobile memory review and insight review screens.
+- Sensitive memory consent and revocation UI in the mobile MVP.
+- Editable communication preferences in the mobile MVP.
+- A small optional guided writing prompt set in the mobile MVP.
+- Explicit consent for sensitive memory storage.
 - Account deletion.
 - Basic privacy controls.
 - API documentation.
@@ -205,7 +232,11 @@ Users should have control over what personal context is used by SELA.
 - Dedicated Python AI service.
 - Subscription and payment gateway.
 - Granular privacy preference center.
-- Scheduled insight generation.
+- Per-entry journal analysis (core capability, post-MVP delivery).
+- Full guided-writing prompt library.
+- Full session inventory and revoke-all.
+- Data export.
+- Push notification reminders.
 
 ## 7. Functional Requirements
 
@@ -222,10 +253,15 @@ Users should have control over what personal context is used by SELA.
 | FR-009 | The system can extract structured memories. |
 | FR-010 | Users can inspect and provide feedback on memories. |
 | FR-011 | Users can generate insights on demand. |
-| FR-012 | Post-MVP: the system can generate scheduled insights. |
+| FR-012 | The system can generate weekly and monthly insights with user opt-in and a user-configurable schedule. |
 | FR-013 | Users can inspect insight evidence. |
 | FR-014 | Users can manage basic communication preferences in MVP; granular privacy preferences are post-MVP. |
 | FR-015 | Users can delete their account and associated data. |
+| FR-016 | Users can opt in to storage of sensitive memories; sensitive memories are skipped by default. |
+| FR-017 | Post-MVP: users can request analysis of a specific journal entry. |
+| FR-018 | Users can edit language, timezone, display name, and communication style in the mobile MVP. |
+| FR-019 | Users can disable scheduled insights at any time. |
+| FR-020 | Users can start a journal from a small optional guided prompt in the mobile MVP. |
 
 ## 8. Non-functional Requirements
 
@@ -291,6 +327,29 @@ These are initial targets, not guaranteed service-level commitments.
 5. Backend stores the insight and evidence.
 6. User reviews and provides feedback.
 
+### Journey D: Receive a Scheduled Reflection
+
+1. User enables weekly or monthly reflection and chooses a timezone-aware
+   schedule.
+2. Backend schedules a durable job and confirms the schedule.
+3. At the scheduled time, the worker gathers eligible context.
+4. AI generates a candidate insight with evidence.
+5. If evidence is insufficient, no insight is created and the user sees an
+   explicit outcome.
+6. User reviews, confirms, corrects, or rejects the insight.
+7. User can disable the schedule at any time.
+
+### Journey E: Analyze a Journal Entry (Post-MVP)
+
+1. User opens a journal entry and requests analysis.
+2. Backend loads the owned entry and eligible related context.
+3. AI produces a cautious analysis that is separate from the original entry.
+4. The original entry remains unchanged.
+5. User can inspect and delete the analysis.
+
+Per-entry analysis is not part of the MVP. It is a core capability with
+post-MVP delivery.
+
 ## 10. Product Success Metrics
 
 Initial product metrics:
@@ -298,11 +357,21 @@ Initial product metrics:
 - Weekly active users.
 - Journal creation frequency.
 - Companion conversation frequency.
-- Insight generation frequency.
+- Insight generation frequency, including scheduled insights.
 - User feedback on insight usefulness.
 - Memory correction and rejection rate.
 - Retention over time.
 - User-reported clarity after reflection.
+
+The measurement plan also covers:
+
+- Activation: first journal, first Companion conversation, first insight review.
+- Meaningful engagement: journal and Companion use, memory correction, insight
+  feedback.
+- Continuity: relevant memory use, reduced repetition, memory correction rate.
+- Perceived usefulness: user-reported clarity and relevance.
+- Trust and safety: memory errors, interpretation errors, privacy incidents,
+  unsafe responses, and crisis-resource accuracy.
 
 Avoid optimizing solely for time spent in the application.
 
@@ -328,6 +397,15 @@ The MVP is acceptable when:
 - The system can store structured memories with provenance.
 - Users can inspect and correct memories.
 - Users can request an insight and inspect its evidence.
+- Users can opt in to weekly or monthly insights and disable them at any time.
+- A scheduled insight is evidence-backed or returns an explicit
+  `insufficient_evidence` outcome.
+- Users can review and correct memories and insights in the mobile MVP.
+- Users can edit language, timezone, display name, and communication style in
+  the mobile MVP.
+- Users can grant and revoke sensitive memory consent in the mobile MVP.
+- Sensitive memories are skipped by default and stored only with explicit
+  consent.
 - Users can request account deletion with re-authentication.
 - Users cannot access another user's data.
 - The API is documented.
