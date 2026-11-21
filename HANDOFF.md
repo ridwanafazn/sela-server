@@ -1,16 +1,15 @@
 # Session Handoff
 
-Last updated: 2026-11-21 (product vision reconciliation)
+Last updated: 2026-11-21 (B1 + local beta hardening)
 
 ## Current state
 
 - Repository: `C:\Users\Ridwan\Git-v2\sela-server`
-- Branch: `main`, synced with `origin/main` before local commits
-- Latest local commits:
-  - `f4d0da1` — staging runbook and Neon free-tier notes
-  - `ada9f8d` — local verification handoff
-  - a local test-harness commit on top
-- Working tree: B1 backend addendum and documentation changes are uncommitted.
+- Branch: `main`, synced with `origin/main`
+- Latest commit:
+  - `3bdee33` — complete backend addendum and local beta hardening
+- Working tree: clean.
+- Local staging containers: stopped.
 - Release tags:
   - `v0.2.0` — Phase 2 backend freeze
   - `v0.2.1` — Vertex 768-dimensional embedding compatibility
@@ -40,8 +39,8 @@ The product vision review changed the MVP scope. Decisions are recorded in
   "digantikan"/"dihapus"; no "archived" without an archive feature.
 
 The canonical docs, README, roadmap, security/privacy, operations, backend AI
-integration, testing, freeze addendum, and focus phase were updated. Code,
-schema, OpenAPI, and production prompts were intentionally not changed.
+integration, testing, freeze addendum, and focus phase were updated. The B1
+implementation added code, schema, OpenAPI, and active prompt v2.
 
 ## B1 backend addendum — 2026-11-21
 
@@ -94,14 +93,15 @@ Completed:
   - Companion reply, schedule/consent lifecycle, account purge,
   - ngrok tunnel health check.
 
-Blocked:
+GCP status:
 
 - Billing is disabled for `sela-513807`.
 - Cloud Run, Artifact Registry, Cloud Build, Secret Manager, Cloud Scheduler,
   and Vertex AI APIs are disabled.
-- `.env.staging` still needs `AI_API_KEY`. `VERTEX_PROJECT_ID` is now set to
-  `sela-513807` locally.
-- `SAFETY_RESOURCES_FILE` is empty.
+- OpenRouter `AI_API_KEY` is configured locally.
+- `VERTEX_PROJECT_ID` is set to `sela-513807` locally.
+- `SAFETY_RESOURCES_FILE` is still empty; crisis resources remain unreviewed.
+- GCP is intentionally deferred in favor of the verified local staging path.
 
 ## Pre-Beta position
 
@@ -119,9 +119,11 @@ Workstreams from `docs/backend/11-focus-phase.md`:
    clinical review pending. See `docs/backend/16-beta-hardening.md`.
 6. Offline-first - deferred.
 
-The immediate blocker is billing for `sela-513807`. The staging runbook
-(`docs/backend/13-staging-runbook.md`) is ready to execute once billing is
-active.
+The local staging path is verified and is the active path. The GCP runbook
+(`docs/backend/13-staging-runbook.md`) remains available if billing is enabled
+later. The next backend focus is mobile integration and the remaining external
+gates: crisis-resource review, live model quality review, and public-beta
+privacy/legal work.
 
 ## Mobile Phase 1 (2026-11-16)
 
@@ -138,23 +140,37 @@ active.
   Insights and memory (Phase 2), offline L1 (Phase 3).
 - Authoritative mobile docs:
   `C:\Users\Ridwan\Documents\Default Project\sela-documentation\sela-mobile\docs\flutter`.
-- The docs package ships OpenAPI 1.2.0; the backend repository is 1.3.0.
+- The docs package ships OpenAPI 1.2.0; the backend repository is 1.4.0.
   Use the repository contract until the documentation is reconciled.
 
 ## Environment status
 
 All project dev services are stopped at handoff:
 
+- Local staging containers `sela-staging-local-*` stopped.
+- Ollama installed with `nomic-embed-text` (274 MB); model unloaded.
+- ngrok installed; no tunnel running.
 - `sela-api-smoke` and `sela-mock-llm` containers removed.
 - `sela-server-postgres-1` stopped and removed via `docker compose down`.
-- No process listening on ports `8080`, `8090`, `5432`, or `9090`.
 - PostgreSQL data volume retained:
   `sela-server_postgres-data`
 
-To resume:
+To resume local staging:
 
 ```powershell
 Set-Location "C:\Users\Ridwan\Git-v2\sela-server"
+.\scripts\staging-local.ps1 up
+```
+
+Stop it when finished:
+
+```powershell
+.\scripts\staging-local.ps1 down
+```
+
+Local dev without Docker staging:
+
+```powershell
 docker compose up -d
 go run ./cmd/migrate up
 
@@ -219,64 +235,76 @@ Current local state:
 
 - LLM: OpenCode Go OpenAI-compatible endpoint.
 - Model: `deepseek-v4.1-flash`.
-- Embeddings: `fake`.
-- Database: local Docker PostgreSQL with pgvector.
+- Embeddings: Ollama `nomic-embed-text` (768 dimensions) for local staging.
+- Database: Neon PostgreSQL with pgvector.
 - Safety resources: embedded defaults, flagged as unreviewed.
-- `.env.staging` (gitignored): Neon pooled/direct URLs and generated JWT and
-  rate-limit secrets. `AI_API_KEY` and `VERTEX_PROJECT_ID` are still empty.
+- `.env.staging` (gitignored): Neon pooled/direct URLs, JWT and rate-limit
+  secrets, and OpenRouter `AI_API_KEY`. `VERTEX_PROJECT_ID` is set to
+  `sela-513807`.
+- `.env.staging.local` (gitignored): local staging overrides.
 - gcloud account is authenticated and the active project is `sela-513807`.
 
 Before staging or real journal use:
 
-- switch the LLM to OpenRouter,
-- switch embeddings to Vertex,
+- use only OpenRouter `deepseek/deepseek-v4.1-flash-1017`,
+- keep embeddings on Ollama `nomic-embed-text` for local staging,
 - configure reviewed crisis resources,
 - configure AI pricing and budgets.
 
 ## Selected next-phase architecture
 
-- API: Google Cloud Run
+Active path:
+
+- API/worker/scheduler: local Docker
 - Database: Neon PostgreSQL with pgvector
-- Embeddings: Vertex AI `gemini-embedding-001` at 768 dimensions
+- Embeddings: Ollama `nomic-embed-text` at 768 dimensions
 - Text generation: OpenRouter `deepseek/deepseek-v4.1-flash-1017`
+- Public URL: ngrok
 - Target device: Samsung Galaxy A35 (Android)
-- Data: real journal entries
 
-Setup guide:
+Deferred path:
 
-`docs/backend/12-cloud-run-neon-vertex-setup.md`
+- API: Google Cloud Run
+- Embeddings: Vertex AI `gemini-embedding-001`
+- Setup guide: `docs/backend/12-cloud-run-neon-vertex-setup.md`
 
-Worker options in that guide:
+Local staging guide:
 
-1. Cloud Run Job + Cloud Scheduler every 1–2 minutes — cheapest, 0–2 minutes
-   asynchronous latency.
-2. Cloud Run worker pool with one instance — near-immediate processing, roughly
-   $26–31/month after free-tier usage.
+`docs/backend/15-staging-without-gcp.md`
+
+Local runtime:
+
+- `sela-api`
+- `sela-worker`
+- `sela-scheduler`
+- host Ollama
+- ngrok tunnel
 
 ## What the next session needs
 
 ### Accounts and access
 
-1. Google Cloud project with billing enabled.
-2. Google Cloud CLI installed and authenticated:
-   `gcloud auth login`
-3. Neon project in `aws-ap-southeast-1` (Singapore) with pooled and direct URLs.
-4. OpenRouter account, paid credits, key spend limit, and ZDR/no-training
+1. Neon project in `aws-ap-southeast-1` (Singapore) with pooled and direct URLs.
+2. OpenRouter account, paid credits, key spend limit, and ZDR/no-training
    privacy settings.
+3. Ollama for Windows with `nomic-embed-text`.
+4. ngrok account/configuration for the HTTPS tunnel.
 5. A named reviewer for Indonesian crisis resources.
 6. Mobile repository / Flutter project for the Android app.
+7. Google Cloud billing only if the deferred GCP path is revived.
 
 ### Credentials
 
 Do not send secrets in chat or commit them. Put values in:
 
-- `.env` locally, and/or
-- Google Secret Manager for staging.
+- `.env.staging` for staging,
+- `.env.staging.local` for local staging,
+- Google Secret Manager only if the GCP path is revived.
 
-Required staging secrets:
+Required local staging values:
 
 - pooled Neon URL,
-- direct Neon URL (migrations only),
+- direct Neon URL for migrations,
 - JWT access secret,
 - rate-limit secret,
 - OpenRouter API key.
@@ -292,20 +320,20 @@ Required staging secrets:
 
 ## Next steps
 
-1. Activate billing and link it to `sela-513807`.
-2. Create the $1 Cloud Run and Vertex spend caps plus a project-wide alert.
-3. Fill `AI_API_KEY` and `VERTEX_PROJECT_ID` in `.env.staging`.
-4. Execute `docs/backend/13-staging-runbook.md`.
-5. Run the staging smoke test with 3 synthetic entries:
-   `scripts/local-smoke.ps1 -BaseUrl <staging>/api/v1 -WorkerMode GCloud -JournalCount 3`.
-6. Verify logs, backup/restore, and account purge.
-7. Review crisis resources before entering real journal data.
-8. Configure the staging Cloud Scheduler trigger for `sela-worker -schedules`.
-9. Run the staging smoke test for schedule enable/disable and consent
-   grant/revoke.
-10. Build the Android Flutter MVP against the staging API, including memory
-    review, insight review, schedule controls, consent UI, and editable profile
-    preferences.
+1. Start local staging:
+   `.\scripts\staging-local.ps1 up`
+2. Run the smoke test:
+   `.\scripts\staging-local.ps1 smoke`
+3. Verify health, usage, backup, and restore:
+   `.\scripts\staging-local.ps1 health`
+   `.\scripts\staging-local.ps1 usage`
+   `.\scripts\staging-local.ps1 restore-check`
+4. Review crisis resources before entering real journal data.
+5. Run the live model quality evaluation with DeepSeek and Ollama.
+6. Build the Android Flutter MVP against the ngrok URL, including memory review,
+   insight review, schedule controls, consent UI, and editable profile
+   preferences.
+7. Revive the GCP path only if public beta hosting requires it.
 
 ## Known gaps
 
@@ -314,22 +342,23 @@ Required staging secrets:
 - Mobile memory review, insight review, schedule controls, sensitive memory
   consent, editable profile preferences, and the guided writing prompt set are
   not implemented.
-- Scheduled insights are implemented in the backend. The staging scheduler
-  trigger and mobile controls are pending.
+- Scheduled insights are implemented in the backend. The local scheduler runs
+  in Docker; mobile controls are pending.
 - Per-entry journal analysis is post-MVP and not implemented.
 - Sensitive memory consent is implemented in the backend. The mobile consent UI
   is pending.
 - Prompt v2 is active. Live model quality evaluation remains manual.
-- Staging is not deployed. Billing and the required GCP APIs are disabled.
-- `.env.staging` still needs `AI_API_KEY`; `VERTEX_PROJECT_ID` is set locally.
+- Local staging is verified. GCP deployment is deferred; billing and the
+  required GCP APIs are disabled.
+- `.env.staging` has `AI_API_KEY`; `VERTEX_PROJECT_ID` is set locally.
 - `GET /journal-changes` and offline-first sync are Phase 3.
 - Local health gates, AI usage report, backup/restore verification, and incident
   runbook are implemented. Hosted dashboards/alerts are deferred with GCP.
 - Live model quality evaluation for tone, facts, and hallucination is manual.
 - Embedded crisis resources need local clinical review.
-- Real semantic retrieval still needs Vertex or Ollama plus `make backfill`.
-- OpenRouter handles text generation outside GCP. If all journal text must stay
-  in GCP, a Vertex Gemini LLM adapter is required and not yet implemented.
+- Real semantic retrieval works locally with Ollama `nomic-embed-text`.
+- OpenRouter handles text generation outside GCP. A Vertex Gemini LLM adapter is
+  only required if all journal text must stay inside GCP.
 - Email verification and password reset are not implemented. Public users who
   forget a password cannot recover their account.
 - Subscription plans, payment webhooks, entitlements, and free/premium limit
