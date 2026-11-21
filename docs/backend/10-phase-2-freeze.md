@@ -1,5 +1,9 @@
 # Phase 2 Backend Freeze
 
+> Historical snapshot. This document intentionally records the `v0.2.0`
+> freeze at schema `16` and OpenAPI `1.3.0`. Current versions are in
+> `README.md`, `HANDOFF.md`, and `docs/README.md`.
+
 - Release: `v0.2.0`
 - API contract: OpenAPI `1.3.0`
 - Database schema: migration version `16`

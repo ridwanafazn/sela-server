@@ -1,5 +1,8 @@
 # Staging Validation
 
+> Historical snapshot at schema `17`. Current staging uses schema `21`; see
+> `docs/backend/13-staging-runbook.md` and `docs/backend/20-phase-4b.md`.
+
 Date: 2026-11-21
 Project: `sela-513807`
 Neon project: `raspy-river-82693559`

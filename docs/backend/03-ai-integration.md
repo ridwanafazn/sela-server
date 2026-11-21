@@ -1,8 +1,8 @@
 # SELA AI Integration Guide
 
-Version: 1.2
+Version: 1.3
 
-Status: MVP baseline with 2026-11-21 product vision decisions
+Status: current backend through Phase 4B
 
 > Scope note: scheduled weekly/monthly insights are MVP. Per-entry journal
 > analysis is post-MVP; its backend is implemented. Sensitive memory requires
@@ -145,10 +145,21 @@ Gather only relevant:
 - Previous conversation context.
 - User preferences.
 
+Check `privacy_preferences` first:
+
+- `ai_context_mode=none` disables retrieved journal and memory context.
+- `ai_context_mode=journals` allows journals and conversations but excludes
+  memories.
+- `ai_context_mode=journals_and_memories` allows both.
+- The active conversation remains available in every mode.
+- `memory_extraction_enabled=false` skips automatic extraction; it does not
+  delete existing memories.
+
 ### Step 5: Assemble Context
 
 Apply:
 
+- Privacy preference filters.
 - Relevance ranking.
 - Recency.
 - Confirmation status.

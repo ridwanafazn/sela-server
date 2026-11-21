@@ -1,14 +1,17 @@
 # SELA Backend Testing and Deployment
 
-Version: 1.2
+Version: 1.3
 
-Status: MVP baseline with 2026-11-21 product vision decisions
+Status: current backend baseline through Phase 4B
 
 ## 1. Purpose
 
 This document defines backend testing, containerization, CI/CD, deployment, and release requirements.
 
-The deployment target is Google Cloud Run with images stored in Google Artifact Registry.
+The target GCP deployment is Cloud Run with images stored in Artifact Registry.
+The verified staging path is local Docker with Neon PostgreSQL, OpenRouter, and
+Ollama; see `docs/backend/15-staging-without-gcp.md`. GCP remains deferred until
+billing and the required APIs are enabled.
 
 ## 2. Testing Strategy
 
@@ -54,6 +57,13 @@ Test:
 - Idempotent message and insight requests.
 - Account deletion deactivation and purge job creation.
 - Refresh-token rotation and reuse detection.
+- Email verification, password reset, session inventory, and session revocation.
+- Per-entry analysis request, replay, polling, version conflict, stale marker,
+  deletion, and journal-delete cleanup.
+- Privacy preference defaults, updates, and per-user isolation.
+- Companion, insight, and memory-extraction privacy enforcement.
+- Unified search across journals, memories, insights, and analyses.
+- Privacy preferences in data export.
 
 Use an isolated test database.
 
@@ -78,6 +88,12 @@ Test:
 - Scheduled insight schedule changes do not create duplicate jobs.
 - Sensitive memory consent grant, read, and revoke.
 - Account deletion acceptance and re-authentication.
+- Email verification and password-reset status codes.
+- Session inventory, current-session marking, and revocation.
+- Per-entry analysis acceptance, job status, conflict, and deletion.
+- Privacy preference validation and read/update.
+- Unified search type filters, limits, and validation.
+- Export attachment and secret exclusion.
 
 ### AI Adapter Tests
 
@@ -141,7 +157,13 @@ gofmt -w .
 go vet ./...
 go test ./...
 go build ./...
+go test -tags=integration ./...
+npx --yes @redocly/cli@2.78.0 lint docs/shared/openapi.yaml
 ```
+
+Integration tests require `TEST_DATABASE_URL` and a PostgreSQL 17 + pgvector
+instance. OpenAPI lint is valid with four pre-existing warnings on the health
+endpoints.
 
 CI should also verify formatting without changing repository files.
 
@@ -403,47 +425,52 @@ Test recovery procedures periodically.
 
 ### Code
 
-- [ ] Formatting verified.
-- [ ] Static analysis passes.
-- [ ] Unit tests pass.
-- [ ] Integration tests pass.
-- [ ] Authorization tests pass.
+- [x] Formatting verified.
+- [x] Static analysis passes.
+- [x] Unit tests pass.
+- [x] Integration tests pass.
+- [x] Authorization tests pass.
 - [x] Async insight job tests pass.
 - [x] Scheduled insight preference, idempotency, and opt-out tests pass.
 - [x] Sensitive memory consent and revocation tests pass.
 - [x] Prompt v2 deterministic behavior gates pass.
 - [x] Idempotency tests pass.
 - [x] Account deletion tests pass.
-- [ ] OpenAPI validated.
+- [x] OpenAPI validated.
+- [x] Email verification and password reset tests pass.
+- [x] Session inventory and revocation tests pass.
+- [x] Per-entry journal analysis tests pass.
+- [x] Privacy preference and enforcement tests pass.
+- [x] Unified search tests pass.
 
 ### Database
 
-- [ ] Migrations reviewed.
-- [ ] Indexes reviewed.
-- [ ] Backup strategy confirmed.
-- [ ] Connection limits reviewed.
+- [x] Migrations reviewed through `21`.
+- [x] Indexes reviewed, including search GIN indexes.
+- [x] Backup strategy confirmed locally.
+- [x] Connection limits reviewed.
 
 ### AI
 
-- [ ] Provider credentials configured.
-- [ ] Timeouts configured.
-- [ ] Usage tracking enabled.
-- [ ] Token limits configured.
-- [ ] Privacy behavior reviewed.
+- [x] Provider credentials configured for local staging.
+- [x] Timeouts configured.
+- [x] Usage tracking enabled.
+- [x] Token limits configured.
+- [x] Privacy behavior reviewed for Phase 4B.
 
 ### Infrastructure
 
-- [ ] Docker image built.
+- [x] Docker image built for local staging.
 - [ ] Security scan completed.
-- [ ] Image pushed to Artifact Registry.
-- [ ] Cloud Run configuration reviewed.
-- [ ] Secrets configured.
-- [ ] Health checks pass.
-- [ ] Monitoring and alerts active.
+- [ ] Image pushed to Artifact Registry (GCP deferred).
+- [ ] Cloud Run configuration reviewed (GCP deferred).
+- [x] Local secrets configured outside source control.
+- [x] Local health checks pass.
+- [ ] Hosted monitoring and alerts active (GCP deferred).
 
 ### Product and Privacy
 
-- [ ] Journal ownership verified.
+- [x] Journal ownership verified.
 - [x] Memory provenance verified.
 - [x] Insight evidence verified.
 - [x] Schedule lifecycle and weekly scheduled generation verified locally;
@@ -451,9 +478,12 @@ Test recovery procedures periodically.
 - [x] Sensitive memory consent verified, including revocation.
 - [x] Prompt v2 deterministic behavior verified.
 - [ ] Live model quality evaluation completed with the production model.
-- [ ] Staging scheduler trigger verified.
-- [ ] Sensitive logs reviewed.
-- [ ] Data deletion behavior tested.
+- [x] Local Docker scheduler verified; hosted scheduler trigger pending.
+- [x] Sensitive logs reviewed.
+- [x] Data deletion behavior tested locally.
+- [x] Email verification, reset, session inventory, and export verified.
+- [x] Journal analysis verified locally with a real provider.
+- [x] Privacy enforcement and unified search verified locally.
 
 ## 17. Production Acceptance
 

@@ -1,7 +1,8 @@
 # SELA Backend Development Guide
 
-Version: 1.0  
-Status: MVP baseline
+Version: 1.1
+
+Status: current backend through Phase 4B
 
 ## 1. Purpose
 
@@ -21,10 +22,10 @@ The backend is responsible for authentication, user data, journals, conversation
 | API specification | OpenAPI 3.1 |
 | API documentation | Swagger UI or Redoc |
 | Containerization | Docker |
-| Deployment | Google Cloud Run |
-| Registry | Google Artifact Registry |
+| Deployment | Local Docker staging (verified); Google Cloud Run (deferred) |
+| Registry | Local image; Google Artifact Registry (deferred) |
 | CI/CD | GitHub Actions |
-| Migration | golang-migrate or goose |
+| Migration | `golang-migrate` embedded migrations |
 
 Use stable, compatible versions and commit dependency lock information where applicable.
 
@@ -34,74 +35,57 @@ SELA uses a modular monolith.
 
 Each module owns a specific business capability. Modules should communicate through defined interfaces rather than accessing each other's internal implementation directly.
 
-Initial modules:
+Current modules:
 
-- Auth
-- User
-- Journal
-- Conversation
-- Memory
-- Insight
+- Account
 - AI
+- Auth
+- Conversation
+- Insight
 - Job
+- Journal
+- Journal analysis
+- Memory
+- Pre-public account gates
+- Privacy
+- Search
+- User
+
+Platform packages cover AI usage and budgets, database, health, HTTP helpers,
+logging, mail, rate limiting, and safety.
 
 Do not introduce microservices for the MVP.
 
-## 4. Recommended Project Structure
+## 4. Project Structure
+
+The tree below is an early baseline and may not match every current package.
+The module list above and `internal/modules` are authoritative. Modules remain
+flat packages; handlers, services, repositories, and models live together.
 
 ```text
 sela-server/
-├── cmd/
-│   └── api/
-│       └── main.go
-├── internal/
-│   ├── app/
-│   │   ├── bootstrap.go
-│   │   └── dependencies.go
-│   ├── config/
-│   ├── platform/
-│   │   ├── database/
-│   │   ├── logger/
-│   │   ├── security/
-│   │   └── http/
-│   ├── modules/
-│   │   ├── auth/
-│   │   │   ├── handler/
-│   │   │   ├── service/
-│   │   │   ├── repository/
-│   │   │   └── model/
-│   │   ├── user/
-│   │   ├── journal/
-│   │   ├── conversation/
-│   │   ├── memory/
-│   │   ├── insight/
-│   │   ├── ai/
-│   │   └── job/
-│   └── shared/
-│       ├── errors/
-│       ├── response/
-│       ├── pagination/
-│       └── validator/
-├── migrations/
-├── docs/
-│   ├── shared/
-│   └── backend/
-├── scripts/
-├── test/
-│   ├── integration/
-│   └── fixtures/
-├── .github/
-│   └── workflows/
-├── Dockerfile
-├── docker-compose.yml
-├── Makefile
-├── go.mod
-├── go.sum
-├── .env.example
-└── README.md
+|-- cmd/{api,migrate,ops,scheduler,worker}
+|-- internal/app
+|-- internal/config
+|-- internal/evaluation
+|-- internal/modules/{account,ai,auth,conversation,insight,job,journal,journalanalysis,memory,prepublic,privacy,search,user}
+|-- internal/platform/{aiusage,database,health,httpx,logger,mailer,ratelimit,safety}
+|-- internal/shared/{apierrors,authn,clientip,ids,optional,requestid,response,textquery}
+|-- migrations
+|-- prompts
+|-- docs/{shared,backend}
+|-- scripts
+|-- test/integration
+|-- Dockerfile
+|-- compose.staging.yml
+|-- docker-compose.yml
+|-- Makefile
+|-- go.mod
+|-- .env.example
+|-- CHANGELOG.md
+|-- HANDOFF.md
+`-- README.md
 ```
-
-This structure is a recommended baseline. Adjust package boundaries when implementation complexity justifies it.
 
 ## 5. Layer Responsibilities
 

@@ -99,6 +99,9 @@ backup created: backups/restore-check-20261121-182905.dump (0.06 MB)
 restore verified: schema_version=17 public_tables=20
 ```
 
+This sample is from the initial Phase 3 run. Current schema is `21`; rerun the
+restore check after each migration batch.
+
 Backups are written under `backups/`, which is ignored by Git.
 
 A general restore command is available:

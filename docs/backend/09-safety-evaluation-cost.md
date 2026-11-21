@@ -59,12 +59,18 @@ AI_GLOBAL_MONTHLY_BUDGET_USD=0
 A value of zero disables pricing or a budget. When a monthly budget is
 exhausted:
 
-- Companion and insight requests return `429 RATE_LIMITED`;
+- Companion, insight, and journal-analysis requests are blocked or complete
+  without calling the provider;
 - background memory extraction completes without calling the provider.
+
+Privacy preferences can disable personal context independently of budget:
+`ai_context_mode=none` prevents retrieved journal and memory context, and
+`memory_extraction_enabled=false` skips automatic extraction.
 
 Usage rows cascade when the account is deleted. Cost per insight is available
 by joining `ai_usage_events.reference_id` to `insights.id` for
-`operation = 'insight.generate'`.
+`operation = 'insight.generate'`. Journal analysis uses
+`operation = 'journal.analysis'` and references `journal_analyses.id`.
 
 Provider retry counts are not yet exposed by the adapter interface; latency and
 error categories are tracked.

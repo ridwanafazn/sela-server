@@ -1,34 +1,40 @@
-# Focus Phase — Pre-Beta
+# Focus Phase — Pre-Beta and Backend Depth
 
 - Starts after: backend `v0.2.0`
 - Goal: move from a frozen local backend to a real-provider staging system and
   an online-first mobile MVP.
-- Selected architecture: Cloud Run (API) + Neon (PostgreSQL/pgvector) + Vertex
-  AI (`gemini-embedding-001`, 768 dimensions) + OpenRouter
-  (`deepseek/deepseek-v4.1-flash-1017`).
+- Target GCP architecture: Cloud Run (API) + Neon (PostgreSQL/pgvector) +
+  Vertex AI (`gemini-embedding-001`, 768 dimensions).
+- Verified local staging: Docker API/worker/scheduler + Neon + OpenRouter
+  (`deepseek/deepseek-v4.1-flash-1017`) + Ollama (`nomic-embed-text`).
 - Target device: Samsung Galaxy A35, Android.
-- Deployment guide: `docs/backend/12-cloud-run-neon-vertex-setup.md`.
-- This phase does not start until the required inputs below are available.
+- GCP deployment guide: `docs/backend/12-cloud-run-neon-vertex-setup.md`.
+- Local deployment guide: `docs/backend/15-staging-without-gcp.md`.
+- GCP is deferred until billing and the required APIs are available. The local
+  path is active.
 
 ## Session status at handoff
 
-The B1 addendum, local staging path, beta hardening, offline backend, and
-pre-public backend are complete. Phase 4A per-entry journal analysis is now
-implemented on the backend. GCP deployment, mobile delivery, payment provider
-work, legal review, and external security review remain. See `HANDOFF.md`.
+The B1 addendum, local staging path, beta hardening, offline backend,
+pre-public backend, Phase 4A journal analysis, and Phase 4B privacy/search are
+complete. GCP deployment, mobile delivery, payment-provider work, legal review,
+and external security review remain. See `HANDOFF.md`.
 
 The pre-beta sequence is updated by the 2026-11-21 product vision decisions:
 
-1. Real Vertex embeddings and live model evaluation.
-2. Scheduled insights MVP addendum.
-3. Cloud Run + Neon staging.
-4. Android Flutter MVP against staging.
-5. Beta hardening.
-6. Offline-first journaling.
+1. Real embeddings and live model evaluation — local real-provider generation
+   and Ollama embeddings pass; Vertex and manual quality review remain.
+2. Scheduled insights MVP addendum — backend and local scheduler complete;
+   mobile controls pending.
+3. Staging — local Docker + Neon path complete; GCP deferred.
+4. Android Flutter MVP — Phase 1 code complete; remaining flows pending.
+5. Beta hardening — local backend checks complete; hosted alerts and clinical
+   review remain external.
+6. Offline-first journaling — backend complete; Flutter L1 pending.
 
-Journal analysis remains a core capability with post-MVP delivery. Its backend
-is now implemented as Phase 4A after the pre-public gate. See
-`docs/backend/19-journal-analysis.md`. It is not part of the pre-beta sequence.
+Journal analysis is implemented in Phase 4A after the pre-public gate. Privacy
+and unified search are implemented in Phase 4B. See
+`docs/backend/19-journal-analysis.md` and `docs/backend/20-phase-4b.md`.
 
 ## MVP scope addendum — 2026-11-21
 

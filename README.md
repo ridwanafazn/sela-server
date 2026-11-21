@@ -19,40 +19,45 @@ Our philosophy:
 
 ## Backend Status
 
-Backend Phase 2 is complete and frozen at `v0.2.0`.
+Backend Phase 2 is complete and frozen at `v0.2.0`. The pre-public backend and
+Phase 4A/4B depth work are complete on the backend.
 
 - API contract: OpenAPI `1.7.0`.
 - Database schema: migration version `21` (pre-beta, pre-public, Phase 4A, and
   Phase 4B addenda).
+- Documentation index: `docs/README.md`.
 - Release notes: `CHANGELOG.md`.
 - Session handoff: `HANDOFF.md`.
-- Staging validation: `docs/backend/14-staging-validation.md`.
 - Staging without GCP: `docs/backend/15-staging-without-gcp.md`.
 - Beta hardening: `docs/backend/16-beta-hardening.md`.
 - Offline sync backend: `docs/backend/17-offline-sync.md`.
 - Pre-public backend: `docs/backend/18-prepublic.md`.
 - Per-entry journal analysis backend: `docs/backend/19-journal-analysis.md`.
 - Privacy center and advanced search: `docs/backend/20-phase-4b.md`.
-- Freeze checklist and next inputs: `docs/backend/10-phase-2-freeze.md`.
+- Historical freeze: `docs/backend/10-phase-2-freeze.md`.
+- Historical staging validation: `docs/backend/14-staging-validation.md`.
 - Active focus phase: `docs/backend/11-focus-phase.md`.
 
 The 2026-11-21 product vision review added a post-freeze MVP scope addendum:
 
 - Weekly and monthly scheduled insights are MVP. The backend schedule API and
-  fan-out are implemented; the staging scheduler trigger is pending.
-- Per-entry journal analysis is a core capability with post-MVP delivery. Its
-  backend is implemented in Phase 4A; mobile controls remain pending.
+  local Docker scheduler are implemented; a hosted scheduler trigger remains
+  pending with GCP.
+- Per-entry journal analysis is implemented in Phase 4A; mobile controls remain
+  pending.
 - Sensitive memory requires explicit, revocable consent; the backend consent
   API and retrieval enforcement are implemented.
 - Companion and insight prompt v2 are active.
-- Mobile memory review, insight review, schedule controls, consent UI, and
-  editable profile preferences are MVP.
+- Privacy preferences and unified search are implemented in Phase 4B; mobile
+  screens remain pending.
+- Mobile memory review, insight review, schedule controls, consent UI, privacy
+  center, and editable profile preferences are the next Flutter work.
 
 See `docs/shared/10-product-vision-decisions.md`.
 
-The mobile application, staging deployment, real embedding provider, mobile
-memory/insight screens, live model quality evaluation, and Phase 3 beta
-hardening are separate deliverables.
+GCP deployment, real Vertex embeddings, mobile delivery, live model quality
+evaluation, and external legal/security gates remain separate deliverables. The
+verified staging path is local Docker with Neon, OpenRouter, and Ollama.
 
 ## Repositories
 

@@ -257,13 +257,15 @@ style. Personal goals and reflection preferences are post-MVP.
 | FR-011 | Users can generate insights on demand. |
 | FR-012 | The system can generate weekly and monthly insights with user opt-in and a user-configurable schedule. |
 | FR-013 | Users can inspect insight evidence. |
-| FR-014 | Users can manage basic communication preferences in MVP; granular privacy preferences are post-MVP. |
+| FR-014 | Users can manage communication preferences, AI context mode, and automatic memory extraction. |
 | FR-015 | Users can delete their account and associated data. |
 | FR-016 | Users can opt in to storage of sensitive memories; sensitive memories are skipped by default. |
-| FR-017 | Post-MVP: users can request analysis of a specific journal entry. |
+| FR-017 | Users can request, inspect, and delete an analysis of a specific owned journal entry. |
 | FR-018 | Users can edit language, timezone, display name, and communication style in the mobile MVP. |
 | FR-019 | Users can disable scheduled insights at any time. |
 | FR-020 | Users can start a journal from a small optional guided prompt in the mobile MVP. |
+| FR-021 | Users can search their own journals, memories, insights, and analyses. |
+| FR-022 | Users can verify email, reset password, inspect sessions, revoke sessions, and export data. |
 
 ## 8. Non-functional Requirements
 

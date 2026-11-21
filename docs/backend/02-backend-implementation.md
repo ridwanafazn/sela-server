@@ -1,7 +1,8 @@
 # SELA Backend Implementation Guide
 
-Version: 1.1  
-Status: MVP baseline
+Version: 1.2
+
+Status: current backend through Phase 4B
 
 ## 1. Purpose
 

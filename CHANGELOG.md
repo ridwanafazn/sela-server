@@ -95,6 +95,11 @@ All notable backend changes are recorded here.
   AI system design, API contract, security/privacy, operations, roadmap,
   backend AI integration, testing, freeze addendum, focus phase, README, and
   handoff.
+- Added `docs/README.md` as the canonical documentation index.
+- Marked the Phase 2 freeze and schema-17 staging validation as historical
+  snapshots.
+- Added mobile synchronization through `sela-mobile/tool/sync_backend_docs.ps1`
+  and read-only snapshots in `sela-mobile/docs/backend/`.
 
 ### Verification
 

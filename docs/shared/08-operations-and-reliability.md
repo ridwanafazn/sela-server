@@ -1,6 +1,6 @@
 # SELA Operations and Reliability
 
-Version: 1.2
+Version: 1.3
 
 ## 1. Objective
 
@@ -40,18 +40,20 @@ Never use production journal data in development by default.
 
 Initial infrastructure:
 
-| Component | Service |
-|---|---|
-| API | Google Cloud Run |
-| Container registry | Google Artifact Registry |
-| Database | Neon PostgreSQL |
-| Vector search | pgvector |
-| Scheduled trigger | Cloud Scheduler |
-| Background execution | Cloud Run Jobs or worker deployment |
-| CI/CD | GitHub Actions |
-| Optional object storage | Cloudflare R2 |
+| Component | Verified local staging | Target GCP |
+|---|---|---|
+| API | Docker Compose | Cloud Run |
+| Container registry | Local image | Artifact Registry |
+| Database | Neon PostgreSQL | Neon PostgreSQL |
+| Vector search | pgvector | pgvector |
+| Scheduled trigger | Docker scheduler | Cloud Scheduler |
+| Background execution | Docker worker | Cloud Run Jobs or worker |
+| CI/CD | GitHub Actions | GitHub Actions |
+| Optional object storage | Cloudflare R2 | Cloudflare R2 |
 
-Target Cloud Run region: `asia-southeast2`, subject to current availability and service compatibility.
+The local Docker path is verified and active. GCP is deferred until billing and
+the required APIs are enabled. Target Cloud Run region: `asia-southeast2`,
+subject to current availability and service compatibility.
 
 ## 4. Container Strategy
 
@@ -127,7 +129,8 @@ Use Cloud Run Jobs or a protected worker mechanism for execution.
 
 Do not use in-memory timers in Cloud Run services.
 
-Scheduled insight generation is MVP.
+Scheduled insight generation is MVP. The local Docker scheduler is verified;
+the hosted Cloud Scheduler trigger remains pending with GCP.
 
 Requirements:
 

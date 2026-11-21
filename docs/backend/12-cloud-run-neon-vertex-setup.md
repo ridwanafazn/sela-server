@@ -1,5 +1,9 @@
 # Cloud Run + Neon + Vertex Setup
 
+Status: deferred. The verified staging path is
+`docs/backend/15-staging-without-gcp.md`. Use this document only after GCP
+billing and the required APIs are enabled.
+
 Target architecture:
 
 ```text
