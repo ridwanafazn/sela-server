@@ -232,13 +232,14 @@ style. Personal goals and reflection preferences are post-MVP.
 - Complex financial or productivity integrations.
 - Multi-agent architecture.
 - Dedicated Python AI service.
-- Subscription and payment gateway.
-- Granular privacy preference center.
-- Per-entry journal analysis (core capability, post-MVP delivery).
+- Subscription and payment gateway (provider decision pending).
+- Granular privacy preference center (backend implemented in Phase 4B; mobile
+  pending).
+- Per-entry journal analysis (backend implemented in Phase 4A; mobile pending).
 - Full guided-writing prompt library.
-- Full session inventory and revoke-all.
-- Data export.
-- Push notification reminders.
+- Full session inventory and revoke-all (backend implemented).
+- Data export (backend implemented).
+- Push notification reminders (Flutter + provider credentials pending).
 
 ## 7. Functional Requirements
 

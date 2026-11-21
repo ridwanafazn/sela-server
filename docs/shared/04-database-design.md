@@ -91,7 +91,9 @@ Fields:
 - gentle.
 - balanced.
 
-Granular privacy preferences are deferred. The profile keeps only the preferences required for the MVP experience.
+AI context and automatic memory-extraction preferences are stored in
+`privacy_preferences`. The profile keeps only identity and communication
+preferences.
 
 ### auth_sessions
 
