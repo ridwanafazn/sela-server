@@ -551,6 +551,7 @@ Required local staging values:
 ## Useful docs
 
 - `CHANGELOG.md`
+- `docs/README.md`
 - `docs/shared/10-product-vision-decisions.md`
 - `docs/backend/10-phase-2-freeze.md`
 - `docs/backend/11-focus-phase.md`
