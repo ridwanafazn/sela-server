@@ -1,9 +1,9 @@
 # SELA API Contract
 
-Version: 1.6
+Version: 1.7
 
-Status: P0 decisions locked, with 2026-11-21 product vision, pre-public, and
-Phase 4A decisions
+Status: P0 decisions locked, with 2026-11-21 product vision, pre-public,
+Phase 4A, and Phase 4B decisions
 
 > Scope note: scheduled insight preferences and sensitive memory consent are
 > part of the MVP contract. Per-entry journal analysis is post-MVP; its backend
@@ -399,7 +399,32 @@ Rules for the per-entry analysis endpoints defined in `openapi.yaml`:
 - Analysis content is stored separately, is immutable, and is included in the
   user data export.
 
-## 16. Contract Governance
+## 16. Privacy and Search
+
+Privacy rules:
+
+- `GET /me/privacy` returns effective AI context and memory-extraction
+  preferences plus the current legal and sensitive-memory consent summary.
+- `PUT /me/privacy` accepts partial updates.
+- `ai_context_mode` is `none`, `journals`, or `journals_and_memories`.
+- `none` disables journal, conversation, and memory context for Companion and
+  insight generation.
+- `journals` allows journals and conversations but excludes memories.
+- `memory_extraction_enabled=false` skips automatic memory extraction.
+- Existing data is retained when a preference changes.
+- Per-entry analysis remains an explicit request for one entry.
+
+Search rules:
+
+- `GET /search` requires `q` between 2 and 200 characters.
+- `types` defaults to journals, memories, insights, and analyses.
+- `limit` is per type, between 1 and 20, default 10.
+- Search is ranked by PostgreSQL full-text rank and returns plain-text snippets.
+- Draft journals are included; tombstones are excluded.
+- Every query is scoped to the authenticated user.
+- Search is discovery, not pagination for export or synchronization.
+
+## 17. Contract Governance
 
 Before an endpoint is considered implementation-ready:
 

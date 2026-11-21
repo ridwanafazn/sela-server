@@ -1,10 +1,11 @@
 # SELA Security and Privacy
 
-Version: 1.4
+Version: 1.5
 
 > Scope note (2026-11-21): sensitive memory requires explicit, recorded, and
 > revocable user consent. The default remains skip. Per-entry journal analysis
-> uses only the requested entry and is stored separately. See
+> uses only the requested entry and is stored separately. Users can disable AI
+> personal context and automatic memory extraction. See
 > `10-product-vision-decisions.md`.
 
 ## 1. Security Objective
@@ -101,6 +102,11 @@ Per-entry analysis sends only the requested entry. It does not retrieve
 memories, conversations, or other journals. The provider response is validated
 and stored separately from the original entry.
 
+The privacy center controls whether journals and conversations, and optionally
+memories, may be used for AI context. `none` disables personal context for
+Companion and insight generation. Automatic memory extraction can be disabled
+independently. Changing these settings does not delete existing data.
+
 Provider selection must consider privacy, cost, reliability, and quality.
 
 ## 7. Prompt Injection
@@ -153,6 +159,8 @@ Users should be able to:
 - Export their data without credential material.
 - Inspect adult confirmation and legal acceptance state.
 - Request, inspect, and delete a per-entry journal analysis.
+- Control AI personal-context categories and automatic memory extraction.
+- Search their own journals, memories, insights, and analyses.
 
 The system must explain relevant consequences of deletion.
 

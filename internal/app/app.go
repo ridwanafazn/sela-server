@@ -24,6 +24,8 @@ import (
 	"github.com/ridwanafazn/sela-server/internal/modules/journalanalysis"
 	"github.com/ridwanafazn/sela-server/internal/modules/memory"
 	"github.com/ridwanafazn/sela-server/internal/modules/prepublic"
+	"github.com/ridwanafazn/sela-server/internal/modules/privacy"
+	"github.com/ridwanafazn/sela-server/internal/modules/search"
 	"github.com/ridwanafazn/sela-server/internal/modules/user"
 	"github.com/ridwanafazn/sela-server/internal/platform/aiusage"
 	"github.com/ridwanafazn/sela-server/internal/platform/database"
@@ -119,6 +121,10 @@ func BuildRouter(cfg *config.Config, log *slog.Logger, db *database.DB) (*gin.En
 		log,
 	)
 	prepublicHandler := prepublic.NewHandler(prepublicService)
+	privacyService := privacy.NewService(privacy.NewRepository(db.Gorm), log)
+	privacyHandler := privacy.NewHandler(privacyService)
+	searchService := search.NewService(search.NewRepository(db.Gorm), log)
+	searchHandler := search.NewHandler(searchService)
 
 	queue := job.NewQueue(db.Gorm)
 	accountService := account.NewService(
@@ -193,7 +199,7 @@ func BuildRouter(cfg *config.Config, log *slog.Logger, db *database.DB) (*gin.En
 		conversation.Limits{CompanionPerMinute: cfg.RateLimit.CompanionPerMinute},
 		cfg.AI.Model,
 		log,
-	)
+	).WithPrivacy(privacyService)
 	conversationHandler := conversation.NewHandler(conversationService)
 
 	return httpx.NewRouter(httpx.RouterOptions{
@@ -225,6 +231,9 @@ func BuildRouter(cfg *config.Config, log *slog.Logger, db *database.DB) (*gin.En
 			protected.PUT("/me/consents", prepublicHandler.UpdateConsents)
 			protected.GET("/me/entitlements", prepublicHandler.GetEntitlement)
 			protected.GET("/me/export", prepublicHandler.Export)
+			protected.GET("/me/privacy", privacyHandler.Get)
+			protected.PUT("/me/privacy", privacyHandler.Update)
+			protected.GET("/search", searchHandler.Search)
 
 			protected.GET("/journals", journalHandler.List)
 			protected.POST("/journals", journalHandler.Create)

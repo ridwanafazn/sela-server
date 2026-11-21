@@ -21,6 +21,7 @@ import (
 	"github.com/ridwanafazn/sela-server/internal/modules/journal"
 	"github.com/ridwanafazn/sela-server/internal/modules/journalanalysis"
 	"github.com/ridwanafazn/sela-server/internal/modules/memory"
+	"github.com/ridwanafazn/sela-server/internal/modules/privacy"
 	"github.com/ridwanafazn/sela-server/internal/platform/aiusage"
 	"github.com/ridwanafazn/sela-server/internal/platform/database"
 	"github.com/ridwanafazn/sela-server/internal/platform/logger"
@@ -108,6 +109,7 @@ func run() error {
 	}
 
 	embeddingModel := cfg.AI.EmbeddingModelName()
+	privacyService := privacy.NewService(privacy.NewRepository(db.Gorm), log)
 
 	embeddingService := journal.NewEmbeddingService(
 		journal.NewRepository(db.Gorm),
@@ -125,7 +127,7 @@ func run() error {
 		cfg.AI.Provider,
 		usageService,
 		log,
-	)
+	).WithPrivacy(privacyService)
 	insightGeneration := insight.NewGenerationService(
 		insight.NewRepository(db.Gorm),
 		llm,
@@ -133,7 +135,7 @@ func run() error {
 		cfg.AI.Provider,
 		usageService,
 		log,
-	)
+	).WithPrivacy(privacyService)
 	analysisGeneration := journalanalysis.NewGenerationService(
 		journalanalysis.NewRepository(db.Gorm),
 		journal.NewRepository(db.Gorm),

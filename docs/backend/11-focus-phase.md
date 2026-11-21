@@ -297,6 +297,38 @@ Remaining:
 - Analysis history or comparison UI if product evidence supports it.
 - Premium entitlement enforcement if analysis becomes a paid capability.
 
+### 8. Phase 4B - privacy center and advanced search
+
+Status: backend implemented. Mobile screens remain. See
+`docs/backend/20-phase-4b.md`.
+
+Completed:
+
+- Migration `20` with `privacy_preferences`.
+- `GET` and `PUT /me/privacy`.
+- AI context modes `none`, `journals`, and `journals_and_memories`.
+- Automatic memory-extraction preference and worker enforcement.
+- Companion retrieval enforcement.
+- Insight evidence enforcement.
+- Migration `21` with generated search vectors and GIN indexes.
+- `GET /search` across journals, memories, insights, and analyses.
+- Per-type filtering, per-type limit, ranked snippets, and cross-user isolation.
+- Privacy preferences included in data export.
+
+Deferred to Flutter:
+
+- Privacy center screen.
+- Search screen.
+- Push notifications.
+- Encrypted read cache.
+- Full offline-first and multi-device sync.
+- Additional localization.
+
+Evidence-gated:
+
+- Memory graph.
+- Cost and model optimization.
+
 ## Required inputs
 
 ### Immediate
@@ -326,6 +358,7 @@ Remaining:
 - Client email-verification and password-reset screens or deep links.
 - Mobile per-entry analysis request, inspection, stale-state, and delete
   screens.
+- Mobile privacy center, unified search, and notification permission screens.
 
 ### Operations
 

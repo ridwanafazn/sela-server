@@ -1,22 +1,24 @@
 # Session Handoff
 
-Last updated: 2026-11-21 (Phase 4A journal analysis backend)
+Last updated: 2026-11-21 (Phase 4B privacy center and advanced search)
 
 ## Current state
 
 - Repository: `C:\Users\Ridwan\Git-v2\sela-server`
 - Branch: `main`, synced with `origin/main`
-- Latest commit: Phase 4A journal analysis implementation (see `git log -1`).
+- Latest commit: Phase 4B privacy center and advanced search implementation (see
+  `git log -1`).
 - Working tree: clean after commit.
 - Local staging containers: stopped.
 - Release tags:
   - `v0.2.0` — Phase 2 backend freeze
   - `v0.2.1` — Vertex 768-dimensional embedding compatibility
-- API contract: OpenAPI `1.6.0`
-- Database schema: migration version `19` (pre-beta, pre-public, and Phase 4A
-  addenda; `v0.2.0` shipped at 16)
+- API contract: OpenAPI `1.7.0`
+- Database schema: migration version `21` (pre-beta, pre-public, Phase 4A, and
+  Phase 4B addenda; `v0.2.0` shipped at 16)
 - Backend Phase 2: complete and frozen (`10/10` internal stages)
 - Phase 4A journal analysis backend: complete
+- Phase 4B privacy center and advanced search backend: complete
 
 ## Phase progression
 
@@ -28,7 +30,9 @@ Last updated: 2026-11-21 (Phase 4A journal analysis backend)
 | Phase 3 - Beta hardening | Backend complete | Local hardening, offline backend, and observability scaffolding done; mobile offline and hosted alerts pending. |
 | Pre-public backend gate | Complete | Verification, reset, sessions, export, consent, entitlements. External legal/payment gates remain. |
 | Phase 4A - Journal analysis | Backend complete | Async request, evidence, stale state, inspection, deletion, export. Mobile controls pending. |
-| Phase 4B+ - Other depth work | Not started | Privacy center, push, read cache, multi-device sync, advanced search, cost work; evidence required. |
+| Phase 4B - Privacy and search | Backend complete | AI context modes, memory-extraction control, unified search. Mobile screens pending. |
+| Phase 4C+ - Flutter-native depth | Deferred to Flutter | Push, encrypted read cache, full offline, multi-device sync, localization. |
+| Phase 4D - Evidence-gated depth | Not started | Memory graph and cost/model optimization need production usage or product evidence. |
 
 ## Product vision reconciliation - 2026-11-21
 
@@ -209,6 +213,63 @@ Remaining mobile work:
 
 - Analysis request, polling, inspection, stale-state, and delete controls.
 
+## Phase 4B backend - 2026-11-21
+
+Implemented:
+
+- Migration `20` with `privacy_preferences`.
+- Migration `21` with generated search vectors and GIN indexes for memories,
+  insights, and journal analyses.
+- `GET /me/privacy` and `PUT /me/privacy`.
+- AI context modes `none`, `journals`, and `journals_and_memories`.
+- `memory_extraction_enabled` control.
+- Companion retrieval enforcement.
+- Insight generation enforcement.
+- Automatic memory-extraction enforcement.
+- Unified `GET /search` across journals, memories, insights, and analyses.
+- Per-type filtering, per-type limit, ranked snippets, and cross-user isolation.
+- Privacy preferences included in data export.
+
+Verification:
+
+- `go test ./...` passed.
+- Full integration suite passed against PostgreSQL + pgvector.
+- Migration `20` and `21` applied, rolled back, and re-applied; Neon staging was
+  migrated to `21`.
+- Local staging E2E passed: privacy defaults and update, search while context is
+  `none`, no memories with extraction disabled, insight
+  `insufficient_evidence`, and privacy preferences in export.
+- OpenAPI lint is valid with four pre-existing health-endpoint warnings.
+
+Remaining:
+
+- Mobile privacy center, search, and analysis screens.
+- Push notifications, encrypted read cache, full offline, multi-device sync,
+  and localization move to the Flutter phase.
+- Memory graph and cost/model optimization remain evidence-gated.
+
+## Flutter readiness - after Phase 4B
+
+The backend contract is ready for the next Flutter phase:
+
+- OpenAPI `1.7.0`, schema `21`.
+- Auth, journal sync, Companion, memory, insights, schedules, consent, export,
+  entitlements, journal analysis, privacy preferences, and unified search are
+  implemented.
+- Mobile work can now start on:
+  - privacy center screen,
+  - unified search screen,
+  - per-entry analysis request, polling, inspection, stale state, and deletion,
+  - sensitive memory consent and legal consent screens,
+  - session inventory and revoke-all,
+  - email verification and password-reset flows,
+  - offline L1 and conflict resolution.
+- Push notification delivery, encrypted read cache, full offline, multi-device
+  sync, and localization are Flutter-native and should be scheduled in the
+  Flutter phase.
+- Memory graph and cost/model optimization remain evidence-gated and are not
+  blockers for Flutter.
+
 ## Pre-Beta position
 
 Workstreams from `docs/backend/11-focus-phase.md`:
@@ -217,7 +278,7 @@ Workstreams from `docs/backend/11-focus-phase.md`:
    and Ollama embeddings pass. Vertex and manual live quality evaluation remain.
 2. Scheduled insights MVP addendum — backend and local scheduler implemented;
    mobile controls pending.
-3. Staging deployment — Neon schema `19` is applied and local staging is
+3. Staging deployment — Neon schema `21` is applied and local staging is
    verified; GCP deployment is blocked on billing and disabled APIs.
 4. Mobile MVP, including memory, insights, schedule controls, and editable
    profile preferences — Phase 1 code complete; remaining flows not started.
@@ -248,7 +309,7 @@ privacy/legal work.
 - Authoritative mobile docs:
   `C:\Users\Ridwan\Documents\Default Project\sela-documentation\sela-mobile\docs\flutter`.
 - The mobile docs package predates the current backend contract. Use the
-  repository OpenAPI `1.6.0` until the documentation is reconciled.
+  repository OpenAPI `1.7.0` until the documentation is reconciled.
 
 ## Environment status
 
@@ -455,6 +516,13 @@ Required local staging values:
   in Docker; mobile controls are pending.
 - Per-entry journal analysis is implemented in the backend. Mobile request,
   inspection, stale-state, and delete controls are pending.
+- Privacy preferences and automatic memory-extraction control are implemented in
+  the backend. A mobile privacy center is pending.
+- Unified advanced search is implemented in the backend. A mobile search screen
+  is pending.
+- Push notifications, encrypted read cache, full offline, multi-device sync, and
+  additional localization are Flutter-native 4B+ work and remain pending.
+- Memory graph and cost/model optimization remain evidence-gated.
 - Sensitive memory consent is implemented in the backend. The mobile consent UI
   is pending.
 - Prompt v2 is active. Live model quality evaluation remains manual.
@@ -494,6 +562,7 @@ Required local staging values:
 - `docs/backend/17-offline-sync.md`
 - `docs/backend/18-prepublic.md`
 - `docs/backend/19-journal-analysis.md`
+- `docs/backend/20-phase-4b.md`
 - `scripts/staging-preflight.ps1`
 - `docs/backend/09-safety-evaluation-cost.md`
 - `docs/shared/openapi.yaml`

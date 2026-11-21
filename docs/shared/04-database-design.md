@@ -1,9 +1,9 @@
 # SELA Database Design
 
-Version: 1.6
+Version: 1.7
 
 Status: P0 schema decisions locked, with 2026-11-21 product vision, pre-public,
-and Phase 4A decisions
+Phase 4A, and Phase 4B decisions
 
 ## 1. Database Strategy
 
@@ -157,6 +157,28 @@ Rules:
 - Default is `free` and `active`.
 - Payment provider webhooks will update this table after provider selection.
 - Premium limit enforcement is not yet implemented.
+
+### privacy_preferences
+
+Stores user-controlled AI context and automatic memory-extraction settings.
+
+Fields:
+
+- user_id, primary key.
+- ai_context_mode: `none`, `journals`, or `journals_and_memories`.
+- memory_extraction_enabled.
+- created_at.
+- updated_at.
+
+Rules:
+
+- A missing row means `journals_and_memories` and extraction enabled.
+- Defaults preserve pre-4B behavior.
+- `none` disables journal, conversation, and memory context for Companion and
+  insight generation.
+- `journals` excludes memories but keeps journals and conversations.
+- Changing preferences never deletes existing data.
+- Account deletion cascades through `user_id`.
 
 ### auth_rate_limits
 
@@ -507,6 +529,21 @@ Rules:
 - The API marks an analysis stale when the journal version has advanced.
 - AI usage events reference the analysis through `reference_id`.
 
+### search vectors
+
+Generated `tsvector` columns support unified search:
+
+- `journals.search_vector`,
+- `personal_memories.search_vector`,
+- `insights.search_vector`,
+- `journal_analyses.search_vector`.
+
+Rules:
+
+- Vectors are generated columns; they do not store a second copy of user text.
+- Each vector has a GIN index.
+- Search remains scoped by `user_id` and excludes soft-deleted records.
+
 ### ai_usage_events
 
 Stores operational AI metadata for cost, latency, and error tracking.
@@ -785,14 +822,17 @@ The index `journals(user_id, updated_at, id)` supports incremental synchronizati
 
 The following are deferred to the next development phase:
 
-- Granular `user_preferences` and broader privacy-consent records.
+- Remaining granular `user_preferences` beyond AI context and memory
+  extraction.
 - Data export records.
 - Audit-log tables beyond insight feedback and idempotency.
 - Row-level security evaluation.
 
 Scheduled insight preferences and sensitive memory consent are implemented in
 migration `17`. Pre-public account gates are implemented in migration `18`.
-Per-entry journal analysis is implemented in migration `19`.
+Per-entry journal analysis is implemented in migration `19`. Privacy preferences
+are implemented in migration `20`. Generated search vectors for memories,
+insights, and analyses are implemented in migration `21`.
 
 ## 14. Database ERD
 

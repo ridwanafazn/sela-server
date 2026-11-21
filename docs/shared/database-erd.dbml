@@ -60,7 +60,17 @@ Table auth_rate_limits {
     (created_at)
   }
 
-  Note: "Stores hashed rate-limit subjects, never raw IP addresses or account identifiers. Rows may be deleted after their window expires."
+  Note: "Stores hashed rate-limit subjects, never raw IP addresses or account identifiers. Rows may be deleted after their window expires. Generated tsvector columns with GIN indexes support unified search on journals, memories, insights, and analyses."
+}
+
+Table privacy_preferences {
+  user_id uuid [pk]
+  ai_context_mode varchar(30) [not null, default: 'journals_and_memories']
+  memory_extraction_enabled boolean [not null, default: true]
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+
+  Note: "Defaults preserve pre-4B behavior. ai_context_mode: none | journals | journals_and_memories. Changing preferences never deletes existing data."
 }
 
 Table journals {

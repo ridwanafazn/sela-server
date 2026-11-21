@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: SELA API
-  version: 1.6.0
+  version: 1.7.0
   description: |
     REST API for SELA, a personal AI journaling and companion platform.
 
@@ -42,6 +42,8 @@ tags:
     description: Asynchronous insight generation, evidence, and feedback.
   - name: Journal Analysis
     description: Asynchronous per-entry reflection, inspection, and deletion.
+  - name: Search
+    description: Unified search across user-owned journals, memories, insights, and analyses.
 
 security:
   - BearerAuth: []
@@ -406,6 +408,42 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
+  /me/privacy:
+    get:
+      tags: [Profile]
+      operationId: getPrivacyPreferences
+      summary: Get AI context and memory-extraction privacy preferences
+      responses:
+        "200":
+          description: Privacy preferences and consent summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PrivacyPreferencesResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    put:
+      tags: [Profile]
+      operationId: updatePrivacyPreferences
+      summary: Update AI context and memory-extraction privacy preferences
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePrivacyPreferencesRequest"
+      responses:
+        "200":
+          description: Privacy preferences updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PrivacyPreferencesResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
   /me/entitlements:
     get:
       tags: [Profile]
@@ -685,6 +723,46 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/JournalChangeListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /search:
+    get:
+      tags: [Search]
+      operationId: search
+      summary: Search journals, memories, insights, and journal analyses
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: Full-text search query.
+          schema:
+            type: string
+            minLength: 2
+            maxLength: 200
+        - name: types
+          in: query
+          description: Comma-separated result types. Defaults to all types.
+          schema:
+            type: string
+            example: journals,memories
+        - name: limit
+          in: query
+          description: Maximum results per type.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 20
+            default: 10
+      responses:
+        "200":
+          description: Unified search results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
@@ -1699,6 +1777,67 @@ components:
         sync:
           $ref: "#/components/schemas/SyncMetadata"
 
+    SearchResult:
+      type: object
+      required:
+        - type
+        - id
+        - parent_id
+        - title
+        - snippet
+        - date
+        - status
+        - sensitivity
+        - score
+      properties:
+        type:
+          type: string
+          enum: [journal, memory, insight, analysis]
+        id:
+          type: string
+          format: uuid
+        parent_id:
+          type: [string, "null"]
+          format: uuid
+        title:
+          type: [string, "null"]
+        snippet:
+          type: string
+        date:
+          type: string
+          format: date
+        status:
+          type: [string, "null"]
+        sensitivity:
+          type: [string, "null"]
+        score:
+          type: number
+
+    SearchCounts:
+      type: object
+      additionalProperties:
+        type: integer
+
+    SearchResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [query, results, counts, limit]
+          properties:
+            query:
+              type: string
+            results:
+              type: array
+              items:
+                $ref: "#/components/schemas/SearchResult"
+            counts:
+              $ref: "#/components/schemas/SearchCounts"
+            limit:
+              type: integer
+              minimum: 1
+
     JournalAnalysisEvidence:
       type: object
       required: [source_type, source_id, source_date, note]
@@ -2662,6 +2801,53 @@ components:
         privacy_version:
           type: string
           maxLength: 20
+
+    PrivacyPreferences:
+      type: object
+      required:
+        - ai_context_mode
+        - memory_extraction_enabled
+        - sensitive_memory_granted
+        - adult_confirmed
+        - terms_version
+        - privacy_version
+        - updated_at
+      properties:
+        ai_context_mode:
+          type: string
+          enum: [none, journals, journals_and_memories]
+          description: >-
+            none disables personal context; journals allows journals and
+            conversations; journals_and_memories also allows memories.
+        memory_extraction_enabled:
+          type: boolean
+        sensitive_memory_granted:
+          type: boolean
+        adult_confirmed:
+          type: boolean
+        terms_version:
+          type: [string, "null"]
+        privacy_version:
+          type: [string, "null"]
+        updated_at:
+          type: string
+          format: date-time
+
+    PrivacyPreferencesResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/PrivacyPreferences"
+
+    UpdatePrivacyPreferencesRequest:
+      type: object
+      properties:
+        ai_context_mode:
+          type: string
+          enum: [none, journals, journals_and_memories]
+        memory_extraction_enabled:
+          type: boolean
 
     Entitlement:
       type: object

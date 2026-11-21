@@ -57,6 +57,15 @@ All notable backend changes are recorded here.
   - `journal_analysis/v1` prompt,
   - analysis rate limits, budget checks, usage metadata, and export,
   - analysis deletion with pending-job cancellation.
+- Phase 4B backend depth:
+  - migration `20` with `privacy_preferences`,
+  - `GET` and `PUT /me/privacy`,
+  - AI context modes `none`, `journals`, and `journals_and_memories`,
+  - memory-extraction preference,
+  - Companion, insight, and extraction enforcement,
+  - migration `21` with generated search vectors for memories, insights, and analyses,
+  - `GET /search` across journals, memories, insights, and analyses,
+  - privacy preferences included in data export.
 
 ### Changed
 
@@ -76,7 +85,8 @@ All notable backend changes are recorded here.
   dimensions.
 - Memory vocabulary is clarified: internal `superseded`/`deleted`; user-facing
   "digantikan"/"dihapus"; no "archived" without an archive feature.
-- OpenAPI contract advanced to `1.6.0` for per-entry journal analysis.
+- OpenAPI contract advanced to `1.6.0` for per-entry journal analysis and
+  `1.7.0` for privacy preferences and unified search.
 
 ### Documentation
 

@@ -1,10 +1,10 @@
 # Staging Runbook — sela-513807
 
-Status: Neon staging is migrated to schema `19` and passed local API/worker
-smoke tests, including real-provider journal analysis. Google Cloud deployment
-has not been executed because billing is disabled. See
-`docs/backend/14-staging-validation.md` and
-`docs/backend/19-journal-analysis.md`.
+Status: Neon staging is migrated to schema `21` and passed local API/worker
+smoke tests, including real-provider journal analysis, privacy enforcement, and
+unified search. Google Cloud deployment has not been executed because billing is
+disabled. See `docs/backend/14-staging-validation.md`,
+`docs/backend/19-journal-analysis.md`, and `docs/backend/20-phase-4b.md`.
 
 A non-GCP local staging path is documented in
 `docs/backend/15-staging-without-gcp.md` while the GCP billing blocker is

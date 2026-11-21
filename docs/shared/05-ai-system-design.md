@@ -1,11 +1,12 @@
 # SELA AI System Design
 
-Version: 1.3
+Version: 1.4
 
 > Scope note (2026-11-21): scheduled weekly/monthly insights are MVP. Per-entry
 > journal analysis is post-MVP; its backend is implemented in Phase 4A and
-> mobile controls remain pending. Sensitive memory requires explicit consent.
-> See `10-product-vision-decisions.md`.
+> mobile controls remain pending. Users can control AI personal-context
+> categories and automatic memory extraction. Sensitive memory requires explicit
+> consent. See `10-product-vision-decisions.md`.
 
 ## 1. Purpose
 
@@ -153,6 +154,17 @@ A lower-priority source must not override a more direct and recent user statemen
 
 Sensitive memories are excluded from the context hierarchy unless active,
 recorded consent covers the current operation.
+
+Personal-context categories are gated by `privacy_preferences`:
+
+- `none` excludes retrieved journal evidence and memories from Companion and
+  insight generation. Companion still uses the active conversation.
+- `journals` allows journal and conversation context but excludes memories.
+- `journals_and_memories` matches the full hierarchy above.
+- `memory_extraction_enabled=false` prevents automatic extraction of new
+  memories.
+- Per-entry analysis remains an explicit request for one entry.
+- Changing a preference does not delete existing data.
 
 ## 7. Memory Model
 

@@ -16,6 +16,7 @@ import (
 	"github.com/ridwanafazn/sela-server/internal/modules/ai"
 	"github.com/ridwanafazn/sela-server/internal/modules/journal"
 	"github.com/ridwanafazn/sela-server/internal/modules/memory"
+	"github.com/ridwanafazn/sela-server/internal/modules/privacy"
 	"github.com/ridwanafazn/sela-server/internal/platform/aiusage"
 	"github.com/ridwanafazn/sela-server/internal/platform/ratelimit"
 	"github.com/ridwanafazn/sela-server/internal/platform/safety"
@@ -49,6 +50,7 @@ type Service struct {
 	jobs      JobEnqueuer
 	safety    *safety.Service
 	usage     *aiusage.Service
+	privacy   PrivacyReader
 	provider  string
 	llm       ai.LLMProvider
 	limiter   *ratelimit.Limiter
@@ -67,6 +69,11 @@ type MemoryRetriever interface {
 // JobEnqueuer schedules derived work in the same transaction as a message.
 type JobEnqueuer interface {
 	EnqueueMessageMemoryExtraction(ctx context.Context, tx *gorm.DB, userID, messageID, contentHash string, runAt time.Time) error
+}
+
+// PrivacyReader reports which personal context categories are allowed.
+type PrivacyReader interface {
+	AIContextMode(ctx context.Context, userID string) (string, error)
 }
 
 // NewService creates the Companion service.
@@ -102,6 +109,12 @@ func NewService(
 		log:       log,
 		now:       time.Now,
 	}
+}
+
+// WithPrivacy configures personal-context enforcement.
+func (s *Service) WithPrivacy(reader PrivacyReader) *Service {
+	s.privacy = reader
+	return s
 }
 
 // CreateConversation creates a Companion session.
@@ -426,22 +439,41 @@ func (s *Service) SendMessage(ctx context.Context, userID, conversationID, idemp
 		}
 	}
 
-	retrieved, err := s.retrieval.Retrieve(ctx, userID, content, 8)
-	if err != nil {
-		s.log.WarnContext(ctx, "companion context retrieval failed",
-			slog.String("conversation_id", conversationID),
-			slog.String("error", err.Error()),
-		)
-		retrieved = nil
+	allowJournals, allowMemories := privacy.ContextPolicy(privacy.ContextJournalsAndMemories)
+	if s.privacy != nil {
+		mode, err := s.privacy.AIContextMode(ctx, userID)
+		if err != nil {
+			s.log.WarnContext(ctx, "companion privacy preference lookup failed",
+				slog.String("conversation_id", conversationID),
+				slog.String("error", err.Error()),
+			)
+		} else {
+			allowJournals, allowMemories = privacy.ContextPolicy(mode)
+		}
 	}
 
-	memoriesUsed, err := s.retrieveMemories(ctx, userID, content)
-	if err != nil {
-		s.log.WarnContext(ctx, "companion memory retrieval failed",
-			slog.String("conversation_id", conversationID),
-			slog.String("error", err.Error()),
-		)
-		memoriesUsed = nil
+	var retrieved []journal.RetrievedJournal
+	if allowJournals {
+		retrieved, err = s.retrieval.Retrieve(ctx, userID, content, 8)
+		if err != nil {
+			s.log.WarnContext(ctx, "companion context retrieval failed",
+				slog.String("conversation_id", conversationID),
+				slog.String("error", err.Error()),
+			)
+			retrieved = nil
+		}
+	}
+
+	var memoriesUsed []memory.RetrievedMemory
+	if allowMemories {
+		memoriesUsed, err = s.retrieveMemories(ctx, userID, content)
+		if err != nil {
+			s.log.WarnContext(ctx, "companion memory retrieval failed",
+				slog.String("conversation_id", conversationID),
+				slog.String("error", err.Error()),
+			)
+			memoriesUsed = nil
+		}
 	}
 
 	systemPrompt, err := BuildSystemPrompt(language, style, retrieved, memoriesUsed, safetyNote)

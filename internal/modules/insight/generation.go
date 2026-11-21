@@ -15,6 +15,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/ridwanafazn/sela-server/internal/modules/ai"
+	"github.com/ridwanafazn/sela-server/internal/modules/privacy"
 	"github.com/ridwanafazn/sela-server/internal/platform/aiusage"
 	"github.com/ridwanafazn/sela-server/internal/shared/ids"
 	"github.com/ridwanafazn/sela-server/prompts"
@@ -95,8 +96,20 @@ type GenerationService struct {
 	model    string
 	provider string
 	usage    *aiusage.Service
+	privacy  PrivacyReader
 	log      *slog.Logger
 	now      func() time.Time
+}
+
+// PrivacyReader reports which personal context categories are allowed.
+type PrivacyReader interface {
+	AIContextMode(ctx context.Context, userID string) (string, error)
+}
+
+// WithPrivacy configures personal-context enforcement.
+func (s *GenerationService) WithPrivacy(reader PrivacyReader) *GenerationService {
+	s.privacy = reader
+	return s
 }
 
 // NewGenerationService creates the insight generation pipeline.
@@ -156,6 +169,22 @@ func (s *GenerationService) Process(
 	startBound := time.Date(startDate.Year(), startDate.Month(), startDate.Day(), 0, 0, 0, 0, location).UTC()
 	endBound := time.Date(endDate.Year(), endDate.Month(), endDate.Day(), 0, 0, 0, 0, location).AddDate(0, 0, 1).UTC()
 
+	allowJournals, allowMemories := privacy.ContextPolicy(privacy.ContextJournalsAndMemories)
+	if s.privacy != nil {
+		mode, err := s.privacy.AIContextMode(ctx, userID)
+		if err != nil {
+			s.log.WarnContext(ctx, "insight privacy preference lookup failed",
+				slog.String("job_id", jobID),
+				slog.String("error", err.Error()),
+			)
+		} else {
+			allowJournals, allowMemories = privacy.ContextPolicy(mode)
+		}
+	}
+	if !allowJournals {
+		return insufficientResult("Personal context is disabled in your privacy settings. Enable journals and conversations to generate an insight."), nil
+	}
+
 	journals, err := s.repo.EligibleJournals(ctx, userID, startDate, endDate, journalSourceLimit)
 	if err != nil {
 		return nil, err
@@ -164,9 +193,12 @@ func (s *GenerationService) Process(
 	if err != nil {
 		return nil, err
 	}
-	memories, err := s.repo.EligibleMemories(ctx, userID, memorySourceLimit)
-	if err != nil {
-		return nil, err
+	var memories []SourceRecord
+	if allowMemories {
+		memories, err = s.repo.EligibleMemories(ctx, userID, memorySourceLimit)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	sources := make([]SourceRecord, 0, len(journals)+len(messages)+len(memories))

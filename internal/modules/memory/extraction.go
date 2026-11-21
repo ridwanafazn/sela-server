@@ -109,8 +109,20 @@ type ExtractionService struct {
 	model    string
 	provider string
 	usage    *aiusage.Service
+	privacy  PrivacyReader
 	log      *slog.Logger
 	now      func() time.Time
+}
+
+// PrivacyReader reports whether automatic memory extraction is enabled.
+type PrivacyReader interface {
+	MemoryExtractionEnabled(ctx context.Context, userID string) (bool, error)
+}
+
+// WithPrivacy configures memory-extraction enforcement.
+func (s *ExtractionService) WithPrivacy(reader PrivacyReader) *ExtractionService {
+	s.privacy = reader
+	return s
 }
 
 // NewExtractionService creates the memory extraction pipeline.
@@ -151,6 +163,9 @@ func (s *ExtractionService) ProcessJournal(ctx context.Context, journalID string
 		)
 		return nil
 	}
+	if !s.extractionEnabled(ctx, entry.UserID, "journal", journalID) {
+		return nil
+	}
 
 	return s.process(ctx, &extractionSource{
 		Type:       sourceTypeJournal,
@@ -179,6 +194,9 @@ func (s *ExtractionService) ProcessMessage(ctx context.Context, messageID string
 		)
 		return nil
 	}
+	if !s.extractionEnabled(ctx, message.UserID, "message", messageID) {
+		return nil
+	}
 
 	return s.process(ctx, &extractionSource{
 		Type:       sourceTypeMessage,
@@ -187,6 +205,28 @@ func (s *ExtractionService) ProcessMessage(ctx context.Context, messageID string
 		Content:    message.Content,
 		OccurredAt: message.CreatedAt,
 	})
+}
+
+func (s *ExtractionService) extractionEnabled(ctx context.Context, userID, sourceType, sourceID string) bool {
+	if s.privacy == nil {
+		return true
+	}
+	enabled, err := s.privacy.MemoryExtractionEnabled(ctx, userID)
+	if err != nil {
+		s.log.WarnContext(ctx, "memory extraction privacy lookup failed",
+			slog.String("source_type", sourceType),
+			slog.String("source_id", sourceID),
+			slog.String("error", err.Error()),
+		)
+		return true
+	}
+	if !enabled {
+		s.log.DebugContext(ctx, "skipped memory extraction by privacy preference",
+			slog.String("source_type", sourceType),
+			slog.String("source_id", sourceID),
+		)
+	}
+	return enabled
 }
 
 func (s *ExtractionService) process(ctx context.Context, source *extractionSource) error {

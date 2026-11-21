@@ -1,8 +1,9 @@
 # SELA Product Specification
 
-Version: 1.4
+Version: 1.5
 
-Status: MVP baseline with 2026-11-21 product vision decisions and Phase 4A
+Status: MVP baseline with 2026-11-21 product vision decisions, Phase 4A, and
+Phase 4B
 
 > Scope note: weekly and monthly scheduled insights are MVP. Per-entry journal
 > analysis is a core product capability with post-MVP delivery; its backend is
@@ -451,3 +452,19 @@ The per-entry journal analysis backend is implemented:
 
 Mobile request, inspection, stale-state, and deletion controls remain pending.
 See `docs/backend/19-journal-analysis.md`.
+
+## 15. Phase 4B Privacy and Search
+
+The backend implements:
+
+- AI context modes: `none`, `journals`, and `journals_and_memories`.
+- Automatic memory-extraction opt-out.
+- Enforcement in Companion retrieval, insight generation, and memory extraction.
+- Unified search across journals, memories, insights, and analyses with type
+  filters, per-type limits, ranked snippets, and ownership isolation.
+- Privacy preferences in data export.
+
+Mobile privacy and search screens remain pending. Push notifications, encrypted
+read cache, full offline, multi-device sync, and localization are Flutter-native
+work. Memory graph and cost/model optimization remain evidence-gated. See
+`docs/backend/20-phase-4b.md`.
